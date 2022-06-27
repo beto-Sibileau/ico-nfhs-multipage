@@ -1,0 +1,10 @@
+dash
+dash-bootstrap-components
+jupyter-dash
+ipykernel
+requests
+pandas
+openpyxl
+numpy
+xlrd
+xlsxwriter
