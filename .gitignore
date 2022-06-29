@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# docker container and vs code folders
+.devcontainer
+.vscode
+
 # C extensions
 *.so
 

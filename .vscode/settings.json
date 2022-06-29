@@ -1,5 +1,0 @@
-{
-    "jupyter.jupyterServerType": "local",
-    "python.pythonPath": "/usr/local/bin/python",
-    "python.formatting.provider": "black"
-}
