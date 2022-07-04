@@ -1,11 +1,11 @@
 dash
 dash-bootstrap-components
 geojson-rewind
-ipykernel
-requests
-pandas
-openpyxl
+gunicorn
 numpy
+openpyxl
+pandas
+requests
 statsmodels
 xlrd
 xlsxwriter
