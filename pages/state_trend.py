@@ -15,6 +15,7 @@ dd_state_4_trend = dcc.Dropdown(
     options=[{"label": l, "value": l} for l in nfhs_345_states],
     value="Kerala",
     multi=True,
+    persistence=True,
 )
 
 # initial indicator type
@@ -28,6 +29,7 @@ dd_indicator_type = dcc.Dropdown(
     ],
     value=ini_ind_type,
     multi=True,
+    persistence=True,
 )
 
 # dcc dropdown: nfhs 345 indicators --> dcc allows multi, styling not as dbc
@@ -40,6 +42,7 @@ dd_indicator_345 = dcc.Dropdown(
     options=[{"label": l, "value": l} for l in ini_indicators_345],
     value=ini_indicators_345[0],
     multi=True,
+    persistence=True,
 )
 
 # %%

@@ -25,6 +25,7 @@ dd_india_or_state = dbc.Select(
     size="sm",
     options=state_options,
     value="Kerala",
+    persistence=True,
 )
 
 # dbc select: KPI district map
@@ -33,6 +34,7 @@ dd_kpi_map_district = dbc.Select(
     size="sm",
     options=district_map_options,
     value=district_kpi_map[0],
+    persistence=True,
 )
 
 # dbc district kpi map row

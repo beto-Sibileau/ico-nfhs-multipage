@@ -29,6 +29,7 @@ dd_states_equity = dbc.Select(
         if l not in union_territories
     ],
     value="All India",
+    persistence=True,
 )
 
 # %%
