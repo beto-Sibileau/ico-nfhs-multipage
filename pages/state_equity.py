@@ -30,6 +30,7 @@ dd_states_equity = dbc.Select(
     ],
     value="All India",
     persistence=True,
+    persistence_type="session",
 )
 
 # %%
@@ -50,6 +51,8 @@ button_group_disagg = html.Div(
                 {"label": "Religion", "value": "Religion"},
             ],
             value="Residence",
+            persistence=True,
+            persistence_type="session",
         ),
     ],
     className="radio-group",

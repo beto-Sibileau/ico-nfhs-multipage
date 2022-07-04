@@ -23,6 +23,7 @@ dd_states = dcc.Dropdown(
     value="Kerala",
     multi=True,
     persistence=True,
+    persistence_type="session",
 )
 
 # dbc select: district scatter list 1
@@ -32,6 +33,7 @@ dd_district_list_1 = dbc.Select(
     options=district_map_options,
     value=district_kpi_map[10],
     persistence=True,
+    persistence_type="session",
 )
 
 # dbc select: district scatter list 2
@@ -41,6 +43,7 @@ dd_district_list_2 = dbc.Select(
     options=district_map_options,
     value=district_kpi_map[14],
     persistence=True,
+    persistence_type="session",
 )
 
 # %%

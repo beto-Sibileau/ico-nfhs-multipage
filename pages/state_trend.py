@@ -16,6 +16,7 @@ dd_state_4_trend = dcc.Dropdown(
     value="Kerala",
     multi=True,
     persistence=True,
+    persistence_type="session",
 )
 
 # initial indicator type
@@ -30,6 +31,7 @@ dd_indicator_type = dcc.Dropdown(
     value=ini_ind_type,
     multi=True,
     persistence=True,
+    persistence_type="session",
 )
 
 # dcc dropdown: nfhs 345 indicators --> dcc allows multi, styling not as dbc
@@ -39,10 +41,7 @@ ini_indicators_345 = sorted(
 )
 dd_indicator_345 = dcc.Dropdown(
     id="indicator-345-dd",
-    options=[{"label": l, "value": l} for l in ini_indicators_345],
-    value=ini_indicators_345[0],
     multi=True,
-    persistence=True,
 )
 
 # %%
@@ -105,7 +104,7 @@ layout = dbc.Container(
                                     "marginBottom": "10px",
                                 },
                             ),
-                            dd_indicator_345,
+                            html.Div(dd_indicator_345, id="dd_indicator_345_container"),
                         ],
                         style={"font-size": "85%"},
                     ),
@@ -135,9 +134,8 @@ layout = dbc.Container(
 
 # %%
 @callback(
-    Output("indicator-345-dd", "options"),
+    Output("dd_indicator_345_container", "children"),
     Input("indicator-type-dd", "value"),
-    prevent_initial_call=True,
 )
 # update dropdown options: indicator 345 based on indicator type/s
 def update_indicator_options(indicator_type):
@@ -150,7 +148,14 @@ def update_indicator_options(indicator_type):
         nfhs_345_ind_df.query("`Indicator Type` in @indicator_type").Indicator.values,
         key=str.lower,
     )
-    return [{"label": l, "value": l} for l in indicators_345]
+    return dcc.Dropdown(
+        id="indicator-345-dd",
+        options=[{"label": l, "value": l} for l in indicators_345],
+        value=indicators_345[0],
+        persistence_type="session",
+        persistence=indicator_type[0],
+        multi=True,
+    )
 
 
 # %%
