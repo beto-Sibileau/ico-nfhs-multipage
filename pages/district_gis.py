@@ -1,4 +1,5 @@
 from dash import callback, dcc, html, Input, Output, register_page
+from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
@@ -14,6 +15,7 @@ from . import (
     geo_dict,
     district_geo_dict,
     geo_json_dict,
+    df_nfhs_345,
 )
 
 register_page(__name__, path="/district_gis", title="District GIS")
@@ -38,6 +40,42 @@ dd_kpi_map_district = dbc.Select(
     persistence=True,
     persistence_type="session",
 )
+
+# function to return cards layout
+# dbc kpi card: https://www.nelsontang.com/blog/2020-07-02-dash-bootstrap-kpi-card/
+def create_card(card_title, card_num):
+    card = dbc.Card(
+        [
+            dbc.CardBody(
+                [
+                    html.H4(
+                        card_title,
+                        className="card-title",
+                        style={"textAlign": "center"},
+                    ),
+                    html.P(
+                        children="N/A",
+                        className="card-value",
+                        id=f"card-val-{card_num}",
+                    ),
+                    # note there's card-text bootstrap class ...
+                    # html.P(
+                    #     "Target: $10.0 M",
+                    #     className="card-target",
+                    # ),
+                    # html.Span([
+                    #     html.I(className="fas fa-arrow-circle-up up"),
+                    #     html.Span(" 5.5% vs Last Year",
+                    #     className="up")
+                    # ])
+                ]
+            )
+        ],
+        color="info",
+        outline=True,
+    )
+    return card
+
 
 # dbc district kpi map row
 layout = dbc.Container(
@@ -92,6 +130,14 @@ layout = dbc.Container(
         ),
         dbc.Row(
             [
+                dbc.Col(create_card("NFHS-4 (2015-16) State Average", 1), width="auto"),
+                dbc.Col(create_card("NFHS-5 (2019-21) State Average", 2), width="auto"),
+            ],
+            justify="evenly",
+            align="center",
+        ),
+        dbc.Row(
+            [
                 dbc.Col(
                     html.Div(
                         [
@@ -133,6 +179,13 @@ layout = dbc.Container(
             ],
             justify="evenly",
             align="center",
+            style={"paddingTop": "20px"},
+        ),
+        dbc.Row(
+            dbc.Col(id="table-col", width="auto"),
+            justify="evenly",
+            align="center",
+            style={"paddingTop": "20px", "paddingBottom": "20px"},
         ),
     ],
     fluid=True,
@@ -172,6 +225,9 @@ nan_red_y_blue = [
 @callback(
     Output("district-plot", "figure"),
     Output("district-plot-r2", "figure"),
+    Output("card-val-1", "children"),
+    Output("card-val-2", "children"),
+    Output("table-col", "children"),
     Input("india-or-state-dd", "value"),
     Input("kpi-district-map-dd", "value"),
     # Input('nfhs-round-dd', 'value'),
@@ -202,6 +258,38 @@ def disp_in_district_map(india_or_state, distr_kpi):
         geofile = {}
         geofile["type"] = "FeatureCollection"
         geofile["features"] = geo_dict[india_or_state]
+        # query state data
+        card_val = df_nfhs_345.query(
+            "State == @india_or_state & Indicator == @distr_kpi & NFHS == 'NFHS 4'"
+        )["Total"].values
+        card_val2 = df_nfhs_345.query(
+            "State == @india_or_state & Indicator == @distr_kpi & NFHS == 'NFHS 5'"
+        )["Total"].values
+        # determine relative changes for dash table
+        table_df = (
+            (
+                display_df_r2.set_index(["District name"]).value * 0.01
+                - display_df.set_index(["District name"]).value * 0.01
+            )
+            .reset_index()
+            .rename(columns={"value": "Abs. Change"})
+        )
+        table_df["Rel. Change"] = (
+            table_df.set_index(["District name"])["Abs. Change"]
+            / display_df.set_index(["District name"]).value
+            * 100
+        ).reset_index()[0]
+        table_df["Growth"] = table_df["Abs. Change"].apply(
+            lambda x: "📈" if x > 0 else "📉"
+        )
+        table_df["Status"] = table_df["Growth"].apply(
+            lambda x: "❌"
+            if ((x == "📈") & (distr_kpi in kpi_color_inverse))
+            | ((x == "📉") & (distr_kpi not in kpi_color_inverse))
+            else "✔️"
+        )
+        table_df.rename(columns={"District name": "District"}, inplace=True)
+        table_df.dropna(subset=["Abs. Change", "Rel. Change"], inplace=True)
 
     # min-max block kpis - before setting missing as negatives
     district_kpi_min = display_df.value.min()
@@ -300,7 +388,26 @@ def disp_in_district_map(india_or_state, distr_kpi):
         projection="mercator",
     )
 
-    return update_cm_fig(cmap_fig), update_cm_fig(cmap_fig_r2)
+    return (
+        update_cm_fig(cmap_fig),
+        update_cm_fig(cmap_fig_r2),
+        f"{str(card_val[0] if card_val else 'N/A')}",
+        f"{str(card_val2[0] if card_val else 'N/A')}",
+        DataTable(
+            data=table_df.to_dict("records"),
+            columns=[
+                {
+                    "name": i,
+                    "id": i,
+                    "type": "numeric",
+                    "format": FormatTemplate.percentage(0),
+                }
+                if "Change" in i
+                else {"name": i, "id": i}
+                for i in table_df.columns
+            ],
+        ),
+    )
 
 
 # %%
