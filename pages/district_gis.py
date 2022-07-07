@@ -266,10 +266,16 @@ def disp_in_district_map(india_or_state, distr_kpi):
             "State == @india_or_state & Indicator == @distr_kpi & NFHS == 'NFHS 5'"
         )["Total"].values
         # determine relative changes for dash table
+        pcnt_scale = (
+            100
+            if distr_kpi
+            != "Average out-of-pocket expenditure per delivery in a public health facility (Rs.)"
+            else 1
+        )
         table_df = (
             (
-                display_df_r2.set_index(["District name"]).value * 0.01
-                - display_df.set_index(["District name"]).value * 0.01
+                display_df_r2.set_index(["District name"]).value / pcnt_scale
+                - display_df.set_index(["District name"]).value / pcnt_scale
             )
             .reset_index()
             .rename(columns={"value": "Abs. Change"})
@@ -277,7 +283,7 @@ def disp_in_district_map(india_or_state, distr_kpi):
         table_df["Rel. Change"] = (
             table_df.set_index(["District name"])["Abs. Change"]
             / display_df.set_index(["District name"]).value
-            * 100
+            * pcnt_scale
         ).reset_index()[0]
         table_df["Growth"] = table_df["Abs. Change"].apply(
             lambda x: "📈" if x > 0 else "📉"
@@ -388,6 +394,42 @@ def disp_in_district_map(india_or_state, distr_kpi):
         projection="mercator",
     )
 
+    # address format data table
+    if (
+        distr_kpi
+        != "Average out-of-pocket expenditure per delivery in a public health facility (Rs.)"
+    ):
+        table_col_format = [
+            {
+                "name": i,
+                "id": i,
+                "type": "numeric",
+                "format": FormatTemplate.percentage(0),
+            }
+            if "Change" in i
+            else {"name": i, "id": i}
+            for i in table_df.columns
+        ]
+    else:
+        table_col_format = [
+            {
+                "name": i,
+                "id": i,
+                "type": "numeric",
+                "format": FormatTemplate.percentage(0),
+            }
+            if "Rel. Change" in i
+            else {
+                "name": i,
+                "id": i,
+                "type": "numeric",
+                "format": FormatTemplate.money(0),
+            }
+            if "Abs. Change" in i
+            else {"name": i, "id": i}
+            for i in table_df.columns
+        ]
+
     return (
         update_cm_fig(cmap_fig),
         update_cm_fig(cmap_fig_r2),
@@ -395,17 +437,7 @@ def disp_in_district_map(india_or_state, distr_kpi):
         f"{str(card_val2[0] if card_val else 'N/A')}",
         DataTable(
             data=table_df.to_dict("records"),
-            columns=[
-                {
-                    "name": i,
-                    "id": i,
-                    "type": "numeric",
-                    "format": FormatTemplate.percentage(0),
-                }
-                if "Change" in i
-                else {"name": i, "id": i}
-                for i in table_df.columns
-            ],
+            columns=table_col_format,
         ),
     )
 
