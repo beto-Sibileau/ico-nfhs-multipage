@@ -113,10 +113,6 @@ layout = dbc.Container(
             ],
             justify="evenly",
             align="center",
-            style={
-                # 'paddingLeft': '25px',
-                "marginBottom": "25px",
-            },
         ),
         dbc.Row(
             [
