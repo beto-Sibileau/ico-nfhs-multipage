@@ -3,6 +3,7 @@ from geojson_rewind import rewind
 import json
 import numpy as np
 import pandas as pd
+import re
 
 # %%
 # geojson all
@@ -26,8 +27,38 @@ ds_df = pd.DataFrame(
 # %%
 # first design: do not share data between pages
 # (assess performance later)
-df_districts = pd.read_excel(
-    "./datasets/NFHS45 CoC and Child Nutrition.xlsx", sheet_name=0, dtype=str
+df_districts = (
+    pd.read_excel(
+        "./datasets/NFHS4-5 District compiled file.xlsx",
+        sheet_name=0,
+        dtype=str,
+        skiprows=1,
+    )
+    .rename(columns={"Districts": "District name", "Survey round": "Round"})
+    .replace(
+        {
+            "State": {
+                "WB": "West Bengal",
+                "TR": "Tripura",
+                "UTTAR PRADESH": "Uttar Pradesh",
+                "UTTARAKHAND": "Uttarakhand",
+            },
+            "District name": {
+                "Tue": "Mon",
+            },
+        }
+    )
+)
+
+# read indicators domain from file
+ind_domains = (
+    pd.Series(
+        pd.read_excel(
+            "./datasets/NFHS4-5 District compiled file.xlsx", sheet_name=0, nrows=0
+        ).columns.values
+    )
+    .apply(lambda x: re.split("\.|\:", x)[0])
+    .unique()[1:]
 )
 
 # %%
@@ -47,9 +78,7 @@ state_geo_df = pd.DataFrame(
 
 # manual adjust after inspection
 state_geo_df.loc[state_geo_df.State == "D & D", "State_geo"] = " Daman and Diu"
-state_geo_df.loc[
-    state_geo_df.State == "D & DNH", "State_geo"
-] = " Dadra and Nagar Haveli"
+state_geo_df.loc[state_geo_df.State == "DNH", "State_geo"] = " Dadra and Nagar Haveli"
 
 # %%
 # auto match data and GEO districts
@@ -81,16 +110,13 @@ state_district_geo_df.loc[
     state_district_geo_df["District name"] == "D & DNH", "District_geo"
 ] = "Dadra & Nagar Haveli"
 print(
-    "Ask RAKESH about PRESENCE of District TUE in NAGALAND - NOTE also TUENSANG appears"
+    "Ask RAKESH about PRESENCE of District TUE in NAGALAND - NOTE also TUENSANG appears: will be considered as MON"
 )
 
 # manual adjust after inspection for double assigned ones
 state_district_geo_df.loc[
     state_district_geo_df["District name"] == "East Godavari", "District_geo"
 ] = "East Godavari"
-state_district_geo_df.loc[
-    state_district_geo_df["District name"] == "Uttara Kannada", "District_geo"
-] = "Uttara Kannada"
 state_district_geo_df.loc[
     state_district_geo_df["District name"] == "East Khasi Hills", "District_geo"
 ] = "East Khasi Hills"
@@ -184,8 +210,10 @@ for state in data_states:
 
 # %%
 # all states list --> populate dropdown later at callback
-# restricted to States only (All India requires more resources to deploy)
-state_options = [{"label": l, "value": l} for l in sorted(data_states, key=str.lower)]
+# States and All India: the latter requires more resources to deploy
+state_options = [
+    {"label": l, "value": l} for l in sorted(["All India", *data_states], key=str.lower)
+]
 
 # %%
 # district map indicators list
@@ -321,7 +349,7 @@ for col in num_cols:
 # first design: do not share data between pages
 # (assess performance later)
 equity_df = pd.read_excel(
-    "./datasets/Equity Analysis.xlsx", sheet_name=None, dtype=str, header=2
+    "./datasets/Equity_Analysis.xlsx", sheet_name=None, dtype=str, header=2
 )
 
 # %%
