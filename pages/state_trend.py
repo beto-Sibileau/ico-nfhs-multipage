@@ -6,7 +6,7 @@ import plotly.express as px
 
 from . import nfhs_345_states, nfhs_345_ind_df, df_nfhs_345, label_no_fig
 
-register_page(__name__, path="/state_trend", title="State Trends")
+register_page(__name__, path="/state-trend", title="State Trends")
 
 # %%
 # dcc dropdown: nfhs 345 states --> dcc allows multi, styling not as dbc

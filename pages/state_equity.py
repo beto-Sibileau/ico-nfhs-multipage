@@ -5,7 +5,7 @@ import plotly.express as px
 
 from . import df_equity, label_no_fig
 
-register_page(__name__, path="/state_equity", title="State Equity")
+register_page(__name__, path="/state-equity", title="State Equity")
 
 # %%
 # dbc select: all india or states for equity

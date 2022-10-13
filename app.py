@@ -1,4 +1,4 @@
-from dash import Dash, dcc, get_asset_url, html, page_container, page_registry
+from dash import Dash, dcc, get_asset_url, html, page_container
 import dash_bootstrap_components as dbc
 
 # %%
@@ -20,11 +20,11 @@ title_row = dbc.Container(
                     [
                         html.Img(src=get_asset_url("logo-unicef-large.svg")),
                     ],
-                    href=list(page_registry.values())[0]["relative_path"],
+                    href="/",
                 ),
                 width=3,
                 # width={"size": 3, "offset": 1},
-                style={"paddingLeft": "20px", "paddingTop": "20px"},
+                style={"paddingLeft": "20px", "paddingTop": "10px"},
             ),
             dbc.Col(
                 html.Div(
@@ -34,7 +34,7 @@ title_row = dbc.Container(
                             style={
                                 "fontWeight": "bold",
                                 "textAlign": "center",
-                                "paddingTop": "25px",
+                                "paddingTop": "10px",
                                 "color": "white",
                                 "fontSize": "32px",
                             },
@@ -43,6 +43,17 @@ title_row = dbc.Container(
                 ),
                 # width='auto',
                 width={"size": "auto", "offset": 1},
+            ),
+            dbc.Col(
+                html.A(
+                    [
+                        html.Img(src=get_asset_url("home_white.svg")),
+                    ],
+                    href="/",
+                ),
+                width=1,
+                # width={"size": 3, "offset": 1},
+                style={"paddingLeft": "150px", "paddingTop": "8px"},
             ),
         ],
         justify="start",
@@ -58,7 +69,7 @@ app.layout = dbc.Container(
         html.Div(
             [title_row],
             style={
-                "height": "100px",
+                "height": "110px",
                 "width": "100%",
                 "backgroundColor": "DeepSkyBlue",
                 "margin-left": "auto",

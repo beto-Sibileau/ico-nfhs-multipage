@@ -15,7 +15,7 @@ from . import (
     df_nfhs_345,
 )
 
-register_page(__name__, path="/district_scatter", title="District Scatter")
+register_page(__name__, path="/district-scatter", title="District Scatter")
 
 # %%
 # dcc dropdown: states --> dcc allows multi, styling not as dbc

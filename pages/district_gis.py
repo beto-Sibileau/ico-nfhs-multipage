@@ -18,7 +18,7 @@ from . import (
     df_nfhs_345,
 )
 
-register_page(__name__, path="/district_gis", title="District GIS")
+register_page(__name__, path="/district-gis", title="District GIS")
 
 # dbc select: KPI district map --> All India or States
 # restricted to States only (All India requires more resources to deploy)
