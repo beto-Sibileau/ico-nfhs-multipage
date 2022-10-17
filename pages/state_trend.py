@@ -172,6 +172,7 @@ def update_trend(state_values, kpi_values):
             value_vars=["Urban", "Rural", "Total"],
         )
         .dropna(subset="value")
+        # probably the duplicates appeared by missing gender annotations
         .drop_duplicates(
             subset=["State", "Indicator", "Year (give as a period)", "variable"]
         )

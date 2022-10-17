@@ -50,17 +50,6 @@ df_districts = (
     )
 )
 
-# read indicators domain from file
-ind_domains = (
-    pd.Series(
-        pd.read_excel(
-            "./datasets/NFHS4-5 District compiled file.xlsx", sheet_name=0, nrows=0
-        ).columns.values
-    )
-    .apply(lambda x: re.split("\.|\:", x)[0])
-    .unique()[1:]
-)
-
 # %%
 # auto match data and GEO states
 data_st_dt_df = df_districts.groupby(
@@ -171,8 +160,10 @@ district_map_df = df_districts.melt(
 filter_na = district_map_df.value.isnull()
 filter_non_num = pd.to_numeric(district_map_df.value, errors="coerce").isnull()
 # negatives detected
-print("Ask RAKESH about PRESENCE of NON-NUMERICS")
-print(district_map_df[filter_non_num & ~filter_na].values[0])
+print(
+    f"Ask RAKESH about PRESENCE of NON-NUMERICS in {(filter_non_num & ~filter_na).sum()} number of entries"
+)
+print(district_map_df[filter_non_num & ~filter_na].values)
 # drop non-num
 district_map_df = (
     district_map_df.drop(district_map_df[filter_non_num & ~filter_na].index)
@@ -182,8 +173,10 @@ district_map_df = (
 
 filter_negative = district_map_df.value < 0
 # negatives detected
-print("Ask RAKESH about PRESENCE of NEGATIVES")
-print(district_map_df[filter_negative].values[0])
+print(
+    f"Ask RAKESH about PRESENCE of NEGATIVES in {(filter_negative).sum()} number of entries"
+)
+print(district_map_df[filter_negative].values)
 # drop negatives
 district_map_df = district_map_df.drop(
     district_map_df[filter_negative].index
@@ -210,10 +203,8 @@ for state in data_states:
 
 # %%
 # all states list --> populate dropdown later at callback
-# States and All India: the latter requires more resources to deploy
-state_options = [
-    {"label": l, "value": l} for l in sorted(["All India", *data_states], key=str.lower)
-]
+# restricted to States only (All India done separately)
+state_options = [{"label": l, "value": l} for l in sorted(data_states, key=str.lower)]
 
 # %%
 # district map indicators list
@@ -221,6 +212,23 @@ district_kpi_map = df_districts.columns[4:].values
 district_map_options = [
     {"label": l, "value": l} for l in sorted(district_kpi_map, key=str.lower)
 ]
+
+# read indicators domain from file
+ind_domains = (
+    pd.Series(
+        pd.read_excel(
+            "./datasets/NFHS4-5 District compiled file.xlsx", sheet_name=0, nrows=0
+        )
+        .columns[4:]
+        .values
+    ).apply(lambda x: re.split("\.|\:", x)[0])
+    # .str.replace("(?i)(women)", "Female", regex=True)
+)
+
+# match domain/indicator (in theory should the same for districts and states, TBC)
+nfhs_dist_ind_df = pd.DataFrame(
+    {"ind_domain": ind_domains, "district_kpi": district_kpi_map}
+)
 
 # %%
 
@@ -284,29 +292,95 @@ df_india["State"] = "India"
 # drop first row
 df_india.drop(0, inplace=True)
 
-# %%
-# Data read 3: compiled states xls
-df_states = pd.read_excel("./datasets/NFHS345.xlsx", sheet_name=0, dtype=str)
-
-# %%
-# filter gender indicators for trend analysis
-df_nfhs_345 = (
+# concat column NFHS-4 as new rows with total only
+df_india_45 = (
     pd.concat(
         [
-            df_states,
             df_india[
                 ["Indicator", "NFHS-4 (2015-16)", "Indicator Type", "Gender", "State"]
             ].rename(columns={"NFHS-4 (2015-16)": "Total"}),
             df_india.drop(columns="NFHS-4 (2015-16)"),
         ],
         ignore_index=True,
+    ).fillna({"NFHS": "NFHS 4", "Year (give as a period)": "2016"})
+    # drop duplicates if missing gender specification
+    .drop_duplicates(
+        subset=["Indicator Type", "Indicator", "Gender", "NFHS"],
+        keep=False,
+        ignore_index=True,
     )
-    .fillna({"NFHS": "NFHS 4", "Year (give as a period)": "2016"})
-    .query("Gender.isnull()", engine="python")
-    .reset_index(drop=True)
+    # replace gender values
+    # .replace(
+    #     {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Men"}}, regex=True
+    # )
+)
+
+# %%
+# Data read 3: compiled states xls
+df_states = (
+    pd.read_excel("./datasets/NFHS345.xlsx", sheet_name=0, dtype=str)
+    # drop duplicates if missing gender specification
+    # .drop_duplicates(
+    #     subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
+    #     keep=False,
+    #     ignore_index=True,
+    # )
+    # replace gender values
+    # .replace(
+    #     {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Male"}}, regex=True
+    # )
+)
+
+# print for Rakesh missing gender entries
+mask_state_dup = df_states[
+    df_states.duplicated(
+        subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
+        keep=False,
+    )
+]
+print(f"RAKESH - missing gender in {len(mask_state_dup)} rows in states data:")
+print(mask_state_dup.values)
+
+# now drop duplicates in missing gender specification - inplace
+df_states.drop_duplicates(
+    subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
+    keep=False,
+    inplace=True,
+    ignore_index=True,
+)
+
+# now replace gender values - inplace
+df_states.replace(
+    {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Male"}},
+    regex=True,
+    inplace=True,
+)
+
+
+# %%
+# trend analysis (gender will be treated as a separated Type - like reported in Districts)
+df_nfhs_345 = (
+    pd.concat(
+        [
+            df_states,
+            df_india_45,
+        ],
+        ignore_index=True,
+    )
     .replace({"State": {"INDIA": "India"}})
     .replace({"State": {"India": "All India"}})
+    # drop duplicates: if India reported in states and separated sheet
+    .drop_duplicates(
+        subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
+        keep="first",
+        ignore_index=True,
+    )
 )
+
+# enhance Indicator Type with Gender to avoid duplicated Indicator names
+df_nfhs_345.loc[df_nfhs_345.Gender.notna(), "Indicator Type"] = df_nfhs_345[
+    df_nfhs_345.Gender.notna()
+][["Indicator Type", "Gender"]].agg(" - ".join, axis=1)
 
 # retain Indicator Types - Indicator combinations
 nfhs_345_ind_df = df_nfhs_345.groupby(
@@ -317,6 +391,105 @@ nfhs_345_ind_df = df_nfhs_345.groupby(
 nfhs_345_states = sorted(df_nfhs_345.State.unique(), key=str.lower)
 
 # %%
+# match indicator domains reported in state vs district
+# ind_dom_match = [
+#     get_close_matches(
+#         dmn.lower(),
+#         nfhs_345_ind_df["Indicator Type"].str.lower().unique(),
+#         n=1,
+#         cutoff=0.6,
+#     )
+#     for dmn in nfhs_dist_ind_df.ind_domain.unique()
+# ]
+
+dom_in_state = [
+    "Population and Household Profile",
+    "Characteristics of Adults (age 15-49 years)",
+    "Marriage and Fertility",
+    "Current Use of Family Planning Methods (currently married women age 15–49 years)",
+    "Unmet Need for Family Planning (currently married women age 15–49 years)",
+    "Quality of Family Planning Services",
+    "Maternity Care (for last birth in the 5 years before the survey)",
+    "Delivery Care (for births in the 5 years before the survey)",
+    "Child Vaccinations and Vitamin A Supplementation",
+    "Treatment of Childhood Diseases (children under age 5 years)",
+    "Child Feeding Practices and Nutritional Status of Children",
+    "Nutritional Status of Adults (age 15-49 years)",
+    "Anaemia among Children and Adults",
+    "Blood Sugar Level among Adults (age 15-49 years) - Female",
+    "Blood Sugar Level among Adults (age 15-49 years) - Male",
+    "Hypertension among Adults (age 15 years and above) - Female",
+    "Hypertension among Adults (age 15 years and above) - Male",
+    "Screening for Cancer among Adults (age 30-49 years) - Female",
+    "Tobacco Use and Alcohol Consumption among Adults (age 15 years and above)",
+]
+
+ind_dom_dist_state_df = pd.DataFrame(
+    {
+        "Dom_in_Dist": nfhs_dist_ind_df.ind_domain.unique(),
+        "Dom_in_State": dom_in_state,
+    }
+)
+
+# %%
+# match indicators within domains reported in state vs district
+kpi_matched_df_list = []
+for dmn in nfhs_dist_ind_df.ind_domain.unique():
+
+    dmn_in_state = ind_dom_dist_state_df.query(
+        "Dom_in_Dist == @dmn"
+    ).Dom_in_State.values[0]
+    ind_in_dist = nfhs_dist_ind_df.query("ind_domain == @dmn").district_kpi.values
+    ind_in_state = nfhs_345_ind_df.query(
+        "`Indicator Type` == @dmn_in_state"
+    ).Indicator.values
+
+    kpi_match = [
+        get_close_matches(kpi, ind_in_state, n=1, cutoff=0.5) for kpi in ind_in_dist
+    ]
+    kpi_matched_df = pd.DataFrame(
+        {
+            "Dom_in_Dist": dmn,
+            "Dom_in_State": dmn_in_state,
+            "kpi_district": ind_in_dist,
+            "kpi_state": [kpi[0] if kpi else np.nan for kpi in kpi_match],
+        }
+    )
+    kpi_matched_df_list.append(kpi_matched_df)
+
+dist_state_kpi_df = pd.concat(kpi_matched_df_list, ignore_index=True)
+# manual adjust after inspection
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district == "Households surveyed", "kpi_state"
+] = np.nan
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district
+    == "49. Children age 12-23 months fully vaccinated based on information from either vaccination card or mother's recall11 (%)",
+    "kpi_state",
+] = np.nan
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district
+    == "58. Children age 9-35 months who received a vitamin A dose in the last 6 months (%)",
+    "kpi_state",
+] = np.nan
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district
+    == "88. Blood sugar level - high or very high (>140 mg/dl) or taking medicine to control blood sugar level23 (%)",
+    "kpi_state",
+] = "Blood sugar level - high (>140 mg/dl) (%)"
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district
+    == "91. Blood sugar level - high or very high (>140 mg/dl) or taking medicine to control blood sugar level23 (%)",
+    "kpi_state",
+] = "Blood sugar level - high (>140 mg/dl) (%)"
+dist_state_kpi_df.loc[
+    dist_state_kpi_df.kpi_district
+    == "101. Women age 15 years and above who use any kind of tobacco (%)",
+    "kpi_state",
+] = "Women who use any kind of tobacco (%)"
+
+
+# %%
 # filter uncleaned data in numerical columns
 num_cols = ["Urban", "Rural", "Total"]
 for col in num_cols:
@@ -324,7 +497,7 @@ for col in num_cols:
     filter_non_num_345 = pd.to_numeric(df_nfhs_345[col], errors="coerce").isnull()
     # non numerics
     print("Ask RAKESH about PRESENCE of NON-NUMERICS")
-    print(df_nfhs_345[filter_non_num_345 & ~filter_na_345][col].values[0])
+    print(df_nfhs_345[filter_non_num_345 & ~filter_na_345][col].values)
     # drop non-num
     df_nfhs_345 = (
         df_nfhs_345.drop(df_nfhs_345[filter_non_num_345 & ~filter_na_345].index)
@@ -338,7 +511,7 @@ for col in num_cols:
     print(
         f"No negatives for df column {col}"
         if df_nfhs_345[filter_neg_345].empty
-        else df_nfhs_345[filter_neg_345].values[0]
+        else df_nfhs_345[filter_neg_345].values
     )
     # drop negatives
     df_nfhs_345 = df_nfhs_345.drop(df_nfhs_345[filter_neg_345].index).reset_index(
