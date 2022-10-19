@@ -200,11 +200,13 @@ district_geo_dict = {}
 for state in data_states:
     featured_df = state_district_geo_df.query("State == @state").reset_index(drop=True)
     district_geo_dict[state] = featured_df
+district_geo_dict["All India"] = state_district_geo_df
 
 # %%
-# all states list --> populate dropdown later at callback
-# restricted to States only (All India done separately)
-state_options = [{"label": l, "value": l} for l in sorted(data_states, key=str.lower)]
+# all states or India list --> populate dropdown later at callback
+state_options = [
+    {"label": l, "value": l} for l in sorted(["All India", *data_states], key=str.lower)
+]
 
 # %%
 # district map indicators list
@@ -248,24 +250,6 @@ label_no_fig = {
         ],
     }
 }
-
-# %%
-# hard code indicator list color: inverse
-kpi_color_inverse = [
-    "Women age 20-24 years married before age 18 years (%)",
-    "Total unmet need (%)",
-    "Unmet need for spacing(%)",
-    "Births delivered by caesarean section (%)",
-    "Births in a private health facility that were delivered by caesarean section %)",
-    "Births in a public health facility that were delivered by caesarean section (%)",
-    "Children under 5 years who are stunted (height-for-age) (%)",
-    "Children under 5 years who are wasted (weight-for-height) (%)",
-    "Children under 5 years who are underweight (weight-for-age) (%)",
-    "Children under 5 years who are overweight (weight-for-height) (%)",
-    "Children age 6-59 months who are anaemic (<11.0 g/dl) (%)",
-    "All women age 15-49 years who are anaemic (%)",
-    "All women age 15-19 years who are anaemic (%) ",
-]
 
 # %%
 # Data read 2: compiled india xls
@@ -366,9 +350,7 @@ df_nfhs_345 = (
             df_india_45,
         ],
         ignore_index=True,
-    )
-    .replace({"State": {"INDIA": "India"}})
-    .replace({"State": {"India": "All India"}})
+    ).replace({"State": {r"(?i)(\bindia\b)": "All India"}}, regex=True)
     # drop duplicates: if India reported in states and separated sheet
     .drop_duplicates(
         subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
@@ -430,6 +412,11 @@ ind_dom_dist_state_df = pd.DataFrame(
         "Dom_in_State": dom_in_state,
     }
 )
+
+# dropdown options for district indicators domain
+ind_dom_dist_options = [
+    {"label": l, "value": l} for l in nfhs_dist_ind_df.ind_domain.unique()
+]
 
 # %%
 # match indicators within domains reported in state vs district
@@ -517,6 +504,15 @@ for col in num_cols:
     df_nfhs_345 = df_nfhs_345.drop(df_nfhs_345[filter_neg_345].index).reset_index(
         drop=True
     )
+
+# %%
+# state names district/state data missmatches
+district_state_match = {
+    "Andaman & Nicobar": "Andaman & Nicobar Islands",
+    "DNH": "Dadra & Nagar Haveli",
+    "Maharastra": "Maharashtra",
+    "NCT of Delhi": "Delhi",
+}
 
 # %%
 # first design: do not share data between pages
