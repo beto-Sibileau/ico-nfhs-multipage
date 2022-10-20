@@ -177,10 +177,10 @@ print(
     f"Ask RAKESH about PRESENCE of NEGATIVES in {(filter_negative).sum()} number of entries"
 )
 print(district_map_df[filter_negative].values)
-# drop negatives
-district_map_df = district_map_df.drop(
-    district_map_df[filter_negative].index
-).reset_index(drop=True)
+# take negatives in absolute value
+district_map_df.loc[district_map_df.value < 0, "value"] = district_map_df[
+    district_map_df.value < 0
+].value.abs()
 
 # %%
 # filter geojson by state
@@ -485,11 +485,9 @@ for col in num_cols:
     # non numerics
     print("Ask RAKESH about PRESENCE of NON-NUMERICS")
     print(df_nfhs_345[filter_non_num_345 & ~filter_na_345][col].values)
-    # drop non-num
-    df_nfhs_345 = (
-        df_nfhs_345.drop(df_nfhs_345[filter_non_num_345 & ~filter_na_345].index)
-        .astype({col: "float64"})
-        .reset_index(drop=True)
+    # transform non-num to NaN
+    df_nfhs_345.loc[:, col] = (
+        df_nfhs_345[col].apply(pd.to_numeric, errors="coerce").astype("float64")
     )
 
     # negatives detected
@@ -500,10 +498,11 @@ for col in num_cols:
         if df_nfhs_345[filter_neg_345].empty
         else df_nfhs_345[filter_neg_345].values
     )
-    # drop negatives
-    df_nfhs_345 = df_nfhs_345.drop(df_nfhs_345[filter_neg_345].index).reset_index(
-        drop=True
-    )
+    # take negatives in absolute value
+    df_nfhs_345.loc[df_nfhs_345[col] < 0, col] = df_nfhs_345[df_nfhs_345[col] < 0][
+        col
+    ].abs()
+
 
 # %%
 # state names district/state data missmatches
