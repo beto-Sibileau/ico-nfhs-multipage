@@ -43,10 +43,17 @@ df_districts = (
                 "UTTAR PRADESH": "Uttar Pradesh",
                 "UTTARAKHAND": "Uttarakhand",
             },
+            # strip commas from district names: Hyderabad particularity
+            # also noted Mahabubnagar written in two distinct forms
+            # also noted Alidabad instead of Adilabad
             "District name": {
                 "Tue": "Mon",
+                r"\,": "",
+                "Mahbubnagar": "Mahabubnagar",
+                "Alidabad": "Adilabad",
             },
-        }
+        },
+        regex=True,
     )
 )
 
@@ -55,6 +62,9 @@ df_districts = (
 data_st_dt_df = df_districts.groupby(
     ["State", "District name"], sort=False, as_index=False
 ).size()
+data_st_dt_df["State, District"] = data_st_dt_df[["State", "District name"]].agg(
+    ",".join, axis=1
+)
 data_states = data_st_dt_df.State.unique()
 geo_states = ds_df.State.dropna().unique()
 
@@ -205,7 +215,14 @@ district_geo_dict["All India"] = state_district_geo_df
 # %%
 # all states or India list --> populate dropdown later at callback
 state_options = [
-    {"label": l, "value": l} for l in sorted(["All India", *data_states], key=str.lower)
+    {"label": l, "value": l}
+    for l in [
+        "All India",
+        "All India Aspirational",
+        "All India Gavi",
+        "All India LaQshya",
+        *sorted(data_states, key=str.lower),
+    ]
 ]
 
 # %%
@@ -511,6 +528,9 @@ district_state_match = {
     "DNH": "Dadra & Nagar Haveli",
     "Maharastra": "Maharashtra",
     "NCT of Delhi": "Delhi",
+    "All India Aspirational": "All India",
+    "All India Gavi": "All India",
+    "All India LaQshya": "All India",
 }
 
 # %%
@@ -581,3 +601,116 @@ df_equity = (
         }
     )
 )
+
+
+# %%
+# aspirational and other districts classification
+aspir_dist_df = pd.read_excel(
+    "./datasets/Aspirational Districts in India.xlsx",
+    sheet_name=0,
+    dtype=str,
+    skiprows=1,
+).replace(
+    {
+        "State ": {
+            "Jammu And Kashmir": "Jammu & Kashmir",
+            "Maharashtra": "Maharastra",
+            "Uttar Pradesh ": "Uttar Pradesh",
+        }
+    }
+)
+# drop row duplicated
+aspir_dist_df = aspir_dist_df[
+    ~aspir_dist_df.Districts.str.contains("Dakshin Bastar Dantewada")
+].reset_index(drop=True)
+
+# is aspirational or UNICEF supported
+aspir_dist_df["All India Aspirational"] = (
+    aspir_dist_df.iloc[:, 3].notnull() | aspir_dist_df.iloc[:, 4].notnull()
+)
+aspir_dist_df["All India Gavi"] = aspir_dist_df.iloc[:, 5].notnull()
+aspir_dist_df["All India LaQshya"] = aspir_dist_df.iloc[:, 6].notnull()
+
+aspir_dist_df["State, District"] = aspir_dist_df[["State ", "Districts"]].agg(
+    ",".join, axis=1
+)
+
+# %%
+asp_dist_match = {
+    "Andhra Pradesh,Kadapa": "Andhra Pradesh,Y.S.R.",
+    "Andhra Pradesh,Vishakhapatnam": "Andhra Pradesh,Visakhapatnam",
+    "Bihar,Champaran East": "Bihar,Purba Champaran",
+    "Bihar,Champaran West": "Bihar,Pashchim Champaran",
+    "Chhattisgarh,Kondagaon": "Chhattisgarh,Kodagaon",
+    "Gujarat,Dahod": "Gujarat,Dohad",
+    "Jharkhand,Sahebganj": "Jharkhand,Sahibganj",
+    "Jharkhand,West Singhbhum ": "Jharkhand,Pashchimi Singhbhum",
+    "Kerala,Wayand": "Kerala,Wayanad",
+    "Madhya Pradesh,Satana": "Madhya Pradesh,Satna",
+    "Tamil Nadu,Ramanathpuram": "Tamil Nadu,Ramanathapuram",
+    "Telangana,Asifabad (Adilabad)": "Telangana,Adilabad",
+    "Telangana,Bhadradri-Kothagudem": "Telangana,Bhadradri Kothagudem",
+    "Telangana,Bhoopalapalli (Warangal)": "Telangana,Warangal",
+    "Telangana,Mahbubnagar": "Telangana,Mahabubnagar",
+    "Uttar Pradesh,Amroha": "Uttar Pradesh,Jyotiba Phule Nagar",
+    "Uttar Pradesh,Badaun": "Uttar Pradesh,Budaun",
+    "Uttar Pradesh,Badohi": "Uttar Pradesh,Sant Ravidas Nagar (Bhadohi)",
+    "Uttar Pradesh,Barabanki": "Uttar Pradesh,Bara Banki",
+    "Uttar Pradesh,Bulandshahar": "Uttar Pradesh,Bulandshahr",
+    "Uttar Pradesh,Ferozabad": "Uttar Pradesh,Firozabad",
+    "Uttar Pradesh,Gautam Budh Nagar": "Uttar Pradesh,Gautam Buddha Nagar",
+    "Uttar Pradesh,Hathras": "Uttar Pradesh,Mahamaya Nagar",
+    "Uttar Pradesh,Kanpur(Dehat)": "Uttar Pradesh,Kanpur Dehat",
+    "Uttar Pradesh,Kanpur(Nagar)": "Uttar Pradesh,Kanpur Nagar",
+    "Uttar Pradesh,Kasganj": "Uttar Pradesh,Kanshiram Nagar",
+    "Uttar Pradesh,Maharajganj": "Uttar Pradesh,Mahrajganj",
+    "Uttar Pradesh,Raebareli": "Uttar Pradesh,Rae Bareli",
+    "West Bengal,Malda": "West Bengal,Maldah",
+}
+
+aspir_dist_df.replace({"State, District": asp_dist_match}, inplace=True)
+
+# data entry error by UNICEF ICO: previous replacement produces duplicates
+print("Ask RAKESH about DUPLICATES in ASPIRATIONALS:")
+print(aspir_dist_df[aspir_dist_df.duplicated(subset=["State, District"], keep=False)])
+
+# drop duplicates in aspirationals: keep first record
+aspir_dist_df = aspir_dist_df.drop_duplicates(
+    subset=["State, District"],
+    keep="first",
+    ignore_index=True,
+).set_index("State, District")
+
+# manually checked to make data entry consistent with duplicates dropped
+checked_aspir_entries = {
+    "Bihar,Darbhanga": {"All India Aspirational": True},
+    "Bihar,Supaul": {"All India Aspirational": True},
+    "Jharkhand,Pashchimi Singhbhum": {"All India LaQshya": True},
+    "Rajasthan,Barmer": {"All India Gavi": True},
+    "Rajasthan,Jaisalmer": {"All India Gavi": True},
+}
+
+for an_entry in checked_aspir_entries:
+    aspir_dist_df.loc[
+        an_entry, checked_aspir_entries[an_entry].keys()
+    ] = checked_aspir_entries[an_entry].values()
+
+# # check dictionary validation
+# count_aspi = 0
+# for an_aspi in aspir_dist_df["State, District"].values:
+#     count_aspi += (
+#         data_st_dt_df["State, District"] == asp_dist_match.get(an_aspi, an_aspi)
+#     ).sum()
+
+# match aspirational districts with reported NFHS by Rakesh (Excel files)
+# asp_dist_match = [
+#     get_close_matches(
+#         dist,
+#         data_st_dt_df["State, District"],
+#         n=1,
+#         cutoff=0.6,
+#     )
+#     for dist in np.setdiff1d(
+#         aspir_dist_df["State, District"], data_st_dt_df["State, District"]
+#     )
+# ]
