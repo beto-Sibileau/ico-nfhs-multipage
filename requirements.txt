@@ -1,5 +1,6 @@
 dash
 dash-bootstrap-components
+dash_treeview_antd
 geojson-rewind
 gunicorn
 numpy
