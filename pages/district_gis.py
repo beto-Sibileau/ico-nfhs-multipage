@@ -548,7 +548,7 @@ def disp_in_district_map(india_or_state, distr_kpi, value_or_change, distr_dmn):
 
     return (
         update_cm_fig(cmap_fig),
-        f"NFHS-5 (2019-21) Average: {india_or_state}",
+        f"NFHS-5 (2019-21) Average: {matched_state}",
         f"{str(card_val[0] if card_val else 'N/A')}",
         DataTable(
             data=table_df.to_dict("records"),
