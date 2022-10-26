@@ -1,4 +1,4 @@
-from dash import callback, dcc, html, Input, Output, register_page
+from dash import callback, dcc, html, Input, Output, State, register_page
 import dash_bootstrap_components as dbc
 import dash_treeview_antd
 import pandas as pd
@@ -11,6 +11,9 @@ from . import (
     district_map_df,
     label_no_fig,
     ind_dom_dist_options,
+    district_state_match,
+    dist_state_kpi_df,
+    df_nfhs_345,
 )
 
 register_page(__name__, path="/district-scatter", title="District Scatter")
@@ -306,6 +309,7 @@ layout = dbc.Container(
             justify="evenly",
             align="center",
         ),
+        html.Br(),
         dbc.Row(
             [
                 dbc.Col(create_card(card_num=1), width="auto"),
@@ -385,8 +389,10 @@ def update_states_selector(checked_tree):
     Input("session", "data"),
     Input("kpi-district-list-1", "value"),
     Input("kpi-district-list-2", "value"),
+    State("kpi-x-dd", "value"),
+    State("kpi-y-dd", "value"),
 )
-def update_scatter(state_values, kpi_1, kpi_2):
+def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
 
     if not state_values:
         return label_no_fig
@@ -412,12 +418,12 @@ def update_scatter(state_values, kpi_1, kpi_2):
     else:
         # rejoin columns
         display_df.columns = [
-            "_".join(a_name).rstrip("_")
+            (" (".join(a_name) + ")").removesuffix(" ()")
             for a_name in display_df.columns.to_flat_index()
         ]
         # rename columns
-        kpi_1 = "_".join([kpi_1, "NFHS-4"])
-        kpi_2 = "_".join([kpi_2, "NFHS-5"])
+        kpi_1 = (" (".join([kpi_1, "NFHS-4"])) + ")"
+        kpi_2 = (" (".join([kpi_2, "NFHS-5"])) + ")"
         scatter_fig = (
             px.scatter(
                 display_df,
@@ -429,6 +435,8 @@ def update_scatter(state_values, kpi_1, kpi_2):
                 trendline_scope="overall",
                 title="NFHS-4 (2015-16)",
                 hover_data=["District name"],
+                height=600,
+                labels={kpi_1: "NFHS-4 Value", kpi_2: "NFHS-5 Value"},
             )
             .update_traces(marker=dict(size=14))
             .update_yaxes(
@@ -440,14 +448,36 @@ def update_scatter(state_values, kpi_1, kpi_2):
                 title_font=dict(size=11),
             )
         )
-        x_avg = display_df[kpi_1].mean()
-        scatter_fig.add_vline(
-            x=x_avg, line_dash="dash", line_width=3, line_color="green"
-        ).update_traces(line_width=3)
-        y_avg = display_df[kpi_2].mean()
-        scatter_fig.add_hline(
-            y=y_avg, line_dash="dash", line_width=3, line_color="green"
-        ).update_traces(line_width=3)
+
+        # mean: All India unless one State Selected
+        match_state = (
+            district_state_match.get(
+                state_values["states"][0], state_values["states"][0]
+            )
+            if len(state_values["states"]) == 1
+            else "All India"
+        )
+        # also match with states indicators
+        match_kpi_1 = dist_state_kpi_df.query(
+            "Dom_in_Dist == @distr_dmn_x & kpi_district == @kpi_1.removesuffix(' (NFHS-4)')"
+        )
+        match_kpi_2 = dist_state_kpi_df.query(
+            "Dom_in_Dist == @distr_dmn_y & kpi_district == @kpi_2.removesuffix(' (NFHS-5)')"
+        )
+        x_avg = (
+            None
+            if pd.isna(*match_kpi_1.kpi_state)
+            else df_nfhs_345.query(
+                "State == @match_state & `Indicator Type` == @match_kpi_1.Dom_in_State.values[0] & Indicator == @match_kpi_1.kpi_state.values[0] & NFHS == 'NFHS 4'"
+            ).Total.values
+        )
+        y_avg = (
+            None
+            if pd.isna(*match_kpi_2.kpi_state)
+            else df_nfhs_345.query(
+                "State == @match_state & `Indicator Type` == @match_kpi_2.Dom_in_State.values[0] & Indicator == @match_kpi_2.kpi_state.values[0] & NFHS == 'NFHS 5'"
+            ).Total.values
+        )
 
         # adjust scales for comparisson
         x_min = display_df[kpi_1].min()
@@ -457,28 +487,40 @@ def update_scatter(state_values, kpi_1, kpi_2):
         # use same range to compare rounds
         full_range = [[x_min, y_min], [x_max, y_max]]
 
-        # add text annotation to avg
-        scatter_fig.add_annotation(
-            x=x_avg,
-            y=full_range[1][1],
-            text=f"Average 1: {x_avg:.0f}",
-            showarrow=True,
-            arrowhead=2,
-            arrowcolor="green",
-            arrowsize=1.5,
-            font={"color": "green"},
-        )
-        scatter_fig.add_annotation(
-            x=full_range[1][0],
-            y=y_avg,
-            xanchor="left",
-            text=f"Average 2: {y_avg:.0f}",
-            showarrow=True,
-            arrowhead=2,
-            arrowcolor="green",
-            arrowsize=1.5,
-            font={"color": "green"},
-        )
+        # x_avg = display_df[kpi_1].mean()
+        if x_avg:
+            scatter_fig.add_vline(
+                x=x_avg[0], line_dash="dash", line_width=3, line_color="green"
+            ).update_traces(line_width=3)
+            # add text annotation to avg X
+            scatter_fig.add_annotation(
+                x=x_avg[0],
+                y=full_range[1][1],
+                text=f"{match_state} Mean-X: {x_avg[0]:.0f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowcolor="green",
+                arrowsize=1.5,
+                font={"color": "green"},
+            )
+
+        # y_avg = display_df[kpi_2].mean()
+        if y_avg:
+            scatter_fig.add_hline(
+                y=y_avg[0], line_dash="dash", line_width=3, line_color="green"
+            ).update_traces(line_width=3)
+            # add text annotation to avg Y
+            scatter_fig.add_annotation(
+                x=full_range[1][0],
+                y=y_avg[0],
+                xanchor="left",
+                text=f"{match_state} Mean-Y: {y_avg[0]:.0f}",
+                showarrow=True,
+                arrowhead=2,
+                arrowcolor="green",
+                arrowsize=1.5,
+                font={"color": "green"},
+            )
 
         r_sq = round(
             px.get_trendline_results(scatter_fig).px_fit_results.iloc[0].rsquared, 2
