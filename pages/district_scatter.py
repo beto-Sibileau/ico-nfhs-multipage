@@ -32,7 +32,7 @@ scatter_change = html.Div(
                 {"label": "NFHS-5 vs. NFHS-4", "value": "rounds"},
                 {"label": "Change vs. Change", "value": "change"},
             ],
-            value="value",
+            value="rounds",
             persistence=True,
             persistence_type="session",
         ),
@@ -312,7 +312,7 @@ layout = dbc.Container(
         html.Br(),
         dbc.Row(
             [
-                dbc.Col(create_card(card_num=1), width="auto"),
+                dbc.Col(create_card(card_num=2), width="auto"),
             ],
             justify="center",
             align="center",
@@ -386,16 +386,21 @@ def update_states_selector(checked_tree):
 # %%
 @callback(
     Output("district-plot-scatter", "figure"),
+    Output("card-tit-2", "children"),
+    Output("card-val-2", "children"),
+    Input("radios-scatter-change", "value"),
     Input("session", "data"),
     Input("kpi-district-list-1", "value"),
     Input("kpi-district-list-2", "value"),
     State("kpi-x-dd", "value"),
     State("kpi-y-dd", "value"),
 )
-def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
+def update_scatter(
+    value_or_change, state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y
+):
 
     if not state_values:
-        return label_no_fig
+        return label_no_fig, [], "N/A"
 
     # query dataframe
     kpi_list = [kpi_1, kpi_2]
@@ -416,14 +421,47 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
     if display_df.empty:
         return label_no_fig
     else:
+        # computation of changes
+        display_df[(kpi_1, "NFHS-5 minus NFHS-4")] = (
+            display_df.set_index(["State", "District name"])[(kpi_1, "NFHS-5")]
+            - display_df.set_index(["State", "District name"])[(kpi_1, "NFHS-4")]
+        ).reset_index()[0]
+        display_df[(kpi_2, "NFHS-5 minus NFHS-4")] = (
+            display_df.set_index(["State", "District name"])[(kpi_2, "NFHS-5")]
+            - display_df.set_index(["State", "District name"])[(kpi_2, "NFHS-4")]
+        ).reset_index()[0]
+
         # rejoin columns
         display_df.columns = [
             (" (".join(a_name) + ")").removesuffix(" ()")
             for a_name in display_df.columns.to_flat_index()
         ]
+
         # rename columns
-        kpi_1 = (" (".join([kpi_1, "NFHS-4"])) + ")"
-        kpi_2 = (" (".join([kpi_2, "NFHS-5"])) + ")"
+        kpi_1 = (
+            " (".join(
+                [
+                    kpi_1,
+                    (
+                        "NFHS-4"
+                        if value_or_change == "rounds"
+                        else "NFHS-5 minus NFHS-4"
+                    ),
+                ]
+            )
+        ) + ")"
+        kpi_2 = (
+            " (".join(
+                [
+                    kpi_2,
+                    (
+                        "NFHS-5"
+                        if value_or_change == "rounds"
+                        else "NFHS-5 minus NFHS-4"
+                    ),
+                ]
+            )
+        ) + ")"
         scatter_fig = (
             px.scatter(
                 display_df,
@@ -433,18 +471,52 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
                 opacity=0.5,
                 trendline="ols",
                 trendline_scope="overall",
-                title="NFHS-4 (2015-16)",
+                title=(
+                    "Analysis of Indicators: NFHS-5 vs. NFHS-4"
+                    if value_or_change == "rounds"
+                    else "Analysis of Indicators Change: NFHS-5 minus NFHS-4"
+                ),
                 hover_data=["District name"],
                 height=600,
-                labels={kpi_1: "NFHS-4 Value", kpi_2: "NFHS-5 Value"},
+                labels={
+                    kpi_1: (
+                        "NFHS-4 Value"
+                        if value_or_change == "rounds"
+                        else "NFHS (5-4) Change (X-Axis)"
+                    ),
+                    kpi_2: (
+                        "NFHS-5 Value"
+                        if value_or_change == "rounds"
+                        else "NFHS (5-4) Change (Y-Axis)"
+                    ),
+                },
             )
+            .update_layout(title_x=0.5)
             .update_traces(marker=dict(size=14))
             .update_yaxes(
-                title="<br>".join(textwrap.wrap(kpi_2, width=70)),
+                title="<br>".join(
+                    textwrap.wrap(
+                        (
+                            kpi_2
+                            if value_or_change == "rounds"
+                            else "Change in " + kpi_2
+                        ),
+                        width=70,
+                    )
+                ),
                 title_font=dict(size=11),
             )
             .update_xaxes(
-                title="<br>".join(textwrap.wrap(kpi_1, width=70)),
+                title="<br>".join(
+                    textwrap.wrap(
+                        (
+                            kpi_1
+                            if value_or_change == "rounds"
+                            else "Change in " + kpi_1
+                        ),
+                        width=70,
+                    )
+                ),
                 title_font=dict(size=11),
             )
         )
@@ -458,25 +530,61 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
             else "All India"
         )
         # also match with states indicators
-        match_kpi_1 = dist_state_kpi_df.query(
+        query_str_1 = (
             "Dom_in_Dist == @distr_dmn_x & kpi_district == @kpi_1.removesuffix(' (NFHS-4)')"
+            if value_or_change == "rounds"
+            else "Dom_in_Dist == @distr_dmn_x & kpi_district == @kpi_1.removesuffix(' (NFHS-5 minus NFHS-4)')"
         )
-        match_kpi_2 = dist_state_kpi_df.query(
+        match_kpi_1 = dist_state_kpi_df.query(query_str_1)
+        query_str_2 = (
             "Dom_in_Dist == @distr_dmn_y & kpi_district == @kpi_2.removesuffix(' (NFHS-5)')"
+            if value_or_change == "rounds"
+            else "Dom_in_Dist == @distr_dmn_y & kpi_district == @kpi_2.removesuffix(' (NFHS-5 minus NFHS-4)')"
         )
+        match_kpi_2 = dist_state_kpi_df.query(query_str_2)
         x_avg = (
             None
             if pd.isna(*match_kpi_1.kpi_state)
-            else df_nfhs_345.query(
-                "State == @match_state & `Indicator Type` == @match_kpi_1.Dom_in_State.values[0] & Indicator == @match_kpi_1.kpi_state.values[0] & NFHS == 'NFHS 4'"
-            ).Total.values
+            else (
+                df_nfhs_345.query(
+                    "State == @match_state & `Indicator Type` == @match_kpi_1.Dom_in_State.values[0] & Indicator == @match_kpi_1.kpi_state.values[0] & NFHS == 'NFHS 4'"
+                ).Total.values
+                if value_or_change == "rounds"
+                else (
+                    df_nfhs_345.query(
+                        "State == @match_state & `Indicator Type` == @match_kpi_1.Dom_in_State.values[0] & Indicator == @match_kpi_1.kpi_state.values[0] & NFHS == 'NFHS 5'"
+                    )
+                    .set_index("State")
+                    .Total
+                    - df_nfhs_345.query(
+                        "State == @match_state & `Indicator Type` == @match_kpi_1.Dom_in_State.values[0] & Indicator == @match_kpi_1.kpi_state.values[0] & NFHS == 'NFHS 4'"
+                    )
+                    .set_index("State")
+                    .Total
+                ).values
+            )
         )
         y_avg = (
             None
             if pd.isna(*match_kpi_2.kpi_state)
-            else df_nfhs_345.query(
-                "State == @match_state & `Indicator Type` == @match_kpi_2.Dom_in_State.values[0] & Indicator == @match_kpi_2.kpi_state.values[0] & NFHS == 'NFHS 5'"
-            ).Total.values
+            else (
+                df_nfhs_345.query(
+                    "State == @match_state & `Indicator Type` == @match_kpi_2.Dom_in_State.values[0] & Indicator == @match_kpi_2.kpi_state.values[0] & NFHS == 'NFHS 5'"
+                ).Total.values
+                if value_or_change == "rounds"
+                else (
+                    df_nfhs_345.query(
+                        "State == @match_state & `Indicator Type` == @match_kpi_2.Dom_in_State.values[0] & Indicator == @match_kpi_2.kpi_state.values[0] & NFHS == 'NFHS 5'"
+                    )
+                    .set_index("State")
+                    .Total
+                    - df_nfhs_345.query(
+                        "State == @match_state & `Indicator Type` == @match_kpi_2.Dom_in_State.values[0] & Indicator == @match_kpi_2.kpi_state.values[0] & NFHS == 'NFHS 4'"
+                    )
+                    .set_index("State")
+                    .Total
+                ).values
+            )
         )
 
         # adjust scales for comparisson
@@ -496,7 +604,9 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
             scatter_fig.add_annotation(
                 x=x_avg[0],
                 y=full_range[1][1],
-                text=f"{match_state} Mean-X: {x_avg[0]:.0f}",
+                text=f"{match_state} "
+                + ("Mean-X: " if value_or_change == "rounds" else "Mean Change-X: ")
+                + f"{x_avg[0]:.0f}",
                 showarrow=True,
                 arrowhead=2,
                 arrowcolor="green",
@@ -514,7 +624,9 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
                 x=full_range[1][0],
                 y=y_avg[0],
                 xanchor="left",
-                text=f"{match_state} Mean-Y: {y_avg[0]:.0f}",
+                text=f"{match_state} "
+                + ("Mean-Y: " if value_or_change == "rounds" else "Mean Change-Y: ")
+                + f"{y_avg[0]:.0f}",
                 showarrow=True,
                 arrowhead=2,
                 arrowcolor="green",
@@ -529,4 +641,10 @@ def update_scatter(state_values, kpi_1, kpi_2, distr_dmn_x, distr_dmn_y):
             -1
         ].hovertemplate = f"<b>OLS trendline</b><br>R<sup>2</sup>={r_sq}"
 
-        return scatter_fig
+        return (
+            scatter_fig,
+            # card title
+            f"Relationship between {'NFHS-4 and NFHS-5' if value_or_change == 'rounds' else 'changes in NFHS-5 minus NFHS-4'} for Selected Indicators",
+            # card value
+            f"R2 of the correlation: {r_sq}",
+        )
