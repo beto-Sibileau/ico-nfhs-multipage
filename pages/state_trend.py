@@ -1,53 +1,116 @@
 from dash import callback, dcc, html, Input, Output, register_page
 import dash_bootstrap_components as dbc
+import dash_treeview_antd
 import numpy as np
 import pandas as pd
 import plotly.express as px
 
-from . import nfhs_345_states, nfhs_345_ind_df, df_nfhs_345, label_no_fig
+from . import (
+    nfhs_345_states,
+    nfhs_345_ind_types,
+    df_nfhs_345,
+    label_no_fig,
+    states_kpi_index,
+)
 
 register_page(__name__, path="/state-trend", title="State Trends")
 
 # %%
-# dcc dropdown: nfhs 345 states --> dcc allows multi, styling not as dbc
-dd_state_4_trend = dcc.Dropdown(
-    id="state-trend-dd",
-    options=[{"label": l, "value": l} for l in nfhs_345_states],
-    value="Kerala",
-    multi=True,
-    persistence=True,
-    persistence_type="session",
-)
+# nfhs_345_states is sorted at init
+states_index = {str(i): a_state for i, a_state in enumerate(nfhs_345_states)}
 
-# initial indicator type
-ini_ind_type = "Population and Household Profile"
-# dcc dropdown: nfhs 345 indicator type --> dcc allows multi, styling not as dbc
-dd_indicator_type = dcc.Dropdown(
-    id="indicator-type-dd",
-    options=[
-        {"label": l, "value": l}
-        for l in sorted(nfhs_345_ind_df["Indicator Type"].unique(), key=str.lower)
+selection_tree = {
+    "title": "",
+    "key": "0",
+    "children": [
+        {"title": a_state, "key": "0-" + i} for i, a_state in states_index.items()
     ],
-    value=ini_ind_type,
-    multi=True,
-    persistence=True,
-    persistence_type="session",
+}
+
+# dbc dd menu + dash tree (same selection in scatter, but states name from Rakesh Excel)
+dd_menu_states = dbc.DropdownMenu(
+    label="Active Selection",
+    id="dd-select-state",
+    size="md",
+    color="info",
+    children=html.Div(
+        [
+            dash_treeview_antd.TreeView(
+                id="states-selected",
+                multiple=True,
+                checkable=True,
+                checked=["0-0"],
+                data=selection_tree,
+            ),
+        ],
+        style={
+            "maxHeight": "400px",
+            "overflowY": "scroll",
+        },
+    ),
 )
 
-# dcc dropdown: nfhs 345 indicators --> dcc allows multi, styling not as dbc
-ini_indicators_345 = sorted(
-    nfhs_345_ind_df.query("`Indicator Type` == @ini_ind_type").Indicator.values,
-    key=str.lower,
+# %%
+# selection tree for kpis
+kpi_selection_tree = {
+    "title": "",
+    "key": "0",
+    "children": [
+        {
+            "title": ind_type,
+            "key": "0-" + str(i),
+            "children": [
+                {"title": indicator, "key": "0-" + k}
+                for k, indicator in states_kpi_index.items()
+                if k.split("-")[0] == str(i)
+            ],
+        }
+        for i, ind_type in enumerate(nfhs_345_ind_types)
+    ],
+}
+
+# dbc dd menu + dash tree (kpi selection by indicator type)
+dd_menu_state_kpis = dbc.DropdownMenu(
+    label="Active Selection",
+    id="dd-select-state-kpi",
+    size="md",
+    color="info",
+    align_end=True,
+    children=html.Div(
+        [
+            dash_treeview_antd.TreeView(
+                id="kpis-selected",
+                multiple=True,
+                checkable=True,
+                checked=["0-16-0"],
+                expanded=["0-16"],
+                data=kpi_selection_tree,
+            ),
+        ],
+        style={
+            "maxHeight": "400px",
+            "overflowY": "scroll",
+        },
+    ),
 )
-dd_indicator_345 = dcc.Dropdown(
-    id="indicator-345-dd",
-    multi=True,
+
+# %%
+# dbc select: residence disaggregation
+dd_residence = dbc.Select(
+    id="dd-residence",
+    size="md",
+    persistence=True,
+    persistence_type="session",
+    options=[{"label": l, "value": l} for l in ["Total", "Urban", "Rural"]],
+    value="Total",
 )
 
 # %%
 # dbc state trends row
 layout = dbc.Container(
     [
+        # mantain data until browser/tab closes
+        dcc.Store(id="trend-session", storage_type="session"),
         dbc.Row(
             [
                 dbc.Col(
@@ -60,60 +123,58 @@ layout = dbc.Container(
                                     "textAlign": "left",  # 'center', #
                                     # 'paddingTop': '25px',
                                     "color": "DeepSkyBlue",
-                                    "fontSize": "14px",
+                                    "fontSize": "15px",
                                     "marginBottom": "10px",
                                 },
                             ),
-                            dd_state_4_trend,
+                            dd_menu_states,
                         ],
-                        style={"font-size": "75%"},
                     ),
-                    width=2,
+                    width="auto",
                 ),
                 dbc.Col(
                     html.Div(
                         [
                             html.P(
-                                "Select Indicator Type",
+                                "Select KPI/s",
                                 style={
                                     "fontWeight": "bold",  # 'normal', #
                                     "textAlign": "left",  # 'center', #
                                     # 'paddingTop': '25px',
                                     "color": "DeepSkyBlue",
-                                    "fontSize": "14px",
+                                    "fontSize": "15px",
                                     "marginBottom": "10px",
                                 },
                             ),
-                            dd_indicator_type,
+                            dd_menu_state_kpis,
                         ],
-                        style={"font-size": "85%"},
                     ),
-                    width=4,
+                    width="auto",
                 ),
                 dbc.Col(
                     html.Div(
                         [
                             html.P(
-                                "Select KPI",
+                                "Select Residence",
                                 style={
                                     "fontWeight": "bold",  # 'normal', #
                                     "textAlign": "left",  # 'center', #
                                     # 'paddingTop': '25px',
                                     "color": "DeepSkyBlue",
-                                    "fontSize": "14px",
+                                    "fontSize": "15px",
                                     "marginBottom": "10px",
                                 },
                             ),
-                            html.Div(dd_indicator_345, id="dd_indicator_345_container"),
-                        ],
-                        style={"font-size": "85%"},
+                            dd_residence,
+                        ]
                     ),
-                    width=6,
+                    width="auto",
                 ),
             ],
             justify="evenly",
             align="center",
         ),
+        html.Br(),
         dbc.Row(
             [
                 dbc.Col(
@@ -128,39 +189,55 @@ layout = dbc.Container(
     style={"paddingTop": "20px"},
 )
 
+
 # %%
 @callback(
-    Output("dd_indicator_345_container", "children"),
-    Input("indicator-type-dd", "value"),
+    Output("dd-select-state", "label"),
+    Output("dd-select-state-kpi", "label"),
+    Output("trend-session", "data"),
+    Input("states-selected", "checked"),
+    Input("kpis-selected", "checked"),
 )
-# update dropdown options: indicator 345 based on indicator type/s
-def update_indicator_options(indicator_type):
+# state and kpi dash trees: prevent select all
+def update_selectors(checked_states, checked_kpis):
 
-    if not indicator_type:
-        return []
+    selected_states = [
+        states_index[k.removeprefix("0-")] for k in checked_states if k != "0"
+    ]
+    selected_kpis = [
+        states_kpi_index[k.removeprefix("0-")]
+        for k in checked_kpis
+        if len(k.split("-")) == 3
+    ]
 
-    # dcc dropdown: nfhs 345 indicators --> dcc allows multi, styling not as dbc
-    indicators_345 = sorted(
-        nfhs_345_ind_df.query("`Indicator Type` in @indicator_type").Indicator.values,
-        key=str.lower,
+    selected_states_label = "Active Selection: " + (
+        "All India"
+        if "All India" in selected_states and len(selected_states) == 1
+        else (
+            f"All India and {len(selected_states)-1} States"
+            if "All India" in selected_states
+            else f"{len(selected_states)} States"
+        )
     )
-    return dcc.Dropdown(
-        id="indicator-345-dd",
-        options=[{"label": l, "value": l} for l in indicators_345],
-        value=indicators_345[0],
-        persistence_type="session",
-        persistence=indicator_type[0],
-        multi=True,
+    selected_kpis_label = f"Active Selection: {len(selected_kpis)} KPIs"
+
+    return (
+        selected_states_label,
+        selected_kpis_label,
+        dict(states=selected_states, kpis=selected_kpis),
     )
 
 
 # %%
 @callback(
     Output("state-trend-plot", "figure"),
-    Input("state-trend-dd", "value"),
-    Input("indicator-345-dd", "value"),
+    Input("trend-session", "data"),
+    Input("dd-residence", "value"),
 )
-def update_trend(state_values, kpi_values):
+def update_trend(selections, residence):
+
+    state_values = selections["states"]
+    kpi_values = selections["kpis"]
 
     if not state_values or not kpi_values:
         return label_no_fig
@@ -169,7 +246,7 @@ def update_trend(state_values, kpi_values):
         df_nfhs_345.query("State in @state_values & Indicator in @kpi_values")
         .melt(
             id_vars=["Indicator", "State", "NFHS", "Year (give as a period)"],
-            value_vars=["Urban", "Rural", "Total"],
+            value_vars=residence,  # ["Urban", "Rural", "Total"],
         )
         .dropna(subset="value")
         # probably the duplicates appeared by missing gender annotations
@@ -180,25 +257,33 @@ def update_trend(state_values, kpi_values):
             ["Year (give as a period)", "State", "Indicator"],
             ignore_index=True,
         )
-        .set_index(["State", "Indicator"])
         .astype({"value": "float64"})
     )
 
     if display_df.empty:
         return label_no_fig
     else:
+        # prettify indicator name
+        display_df.loc[:, "Indicator"] = display_df.Indicator.str.wrap(50).apply(
+            lambda x: x.replace("\n", "<br>")
+        )
+        display_df.set_index(["State", "Indicator"], inplace=True)
         trend_fig = px.line(
             display_df,
             x="Year (give as a period)",
             y="value",
+            labels={"Year (give as a period)": "Year", "variable": "Residence"},
             color=list(display_df.index),
-            symbol="variable",
-            line_dash="variable",
             line_shape="spline",
             render_mode="svg,",
-            hover_data=["NFHS"],
+            hover_data=["NFHS", "variable"],
         ).update_traces(mode="lines+markers")
 
-        trend_fig.update_layout(legend=dict(font=dict(size=8), y=0.5, x=1.1))
+        trend_fig.update_layout(
+            legend=dict(font=dict(size=8), y=0.5, x=1.01),
+            margin_t=20,
+            # margin_l=40,
+            # margin_r=20,
+        )
 
         return trend_fig

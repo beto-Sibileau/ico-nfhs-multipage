@@ -386,6 +386,18 @@ nfhs_345_ind_df = df_nfhs_345.groupby(
     ["Indicator Type", "Indicator"], sort=False, as_index=False
 ).size()
 
+# indicator indexed combinations for dash tree
+nfhs_345_ind_types = sorted(nfhs_345_ind_df["Indicator Type"].unique(), key=str.lower)
+states_kpi_index = {}
+for i, ind_type in enumerate(nfhs_345_ind_types):
+    ind_in_type = sorted(
+        nfhs_345_ind_df.query("`Indicator Type` == @ind_type").Indicator.values,
+        key=str.lower,
+    )
+    states_kpi_index.update(
+        {f"{i}-{j}": indicator for j, indicator in enumerate(ind_in_type)}
+    )
+
 # states or india: nfhs_345 list
 nfhs_345_states = sorted(df_nfhs_345.State.unique(), key=str.lower)
 
