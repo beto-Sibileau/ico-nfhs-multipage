@@ -419,7 +419,7 @@ def update_scatter(
     )
 
     if display_df.empty:
-        return label_no_fig
+        return label_no_fig, [], "N/A"
     else:
         # computation of changes
         display_df[(kpi_1, "NFHS-5 minus NFHS-4")] = (
