@@ -555,7 +555,7 @@ equity_df = pd.read_excel(
 # %%
 # equity xls: concat excel sheets per added indicator
 df_list_equity = []
-for name in list(equity_df.keys())[:6]:
+for name in list(equity_df.keys())[:12]:
     equity_df[name]["Indicator"] = name
     df_list_equity.append(
         equity_df[name]
@@ -563,6 +563,7 @@ for name in list(equity_df.keys())[:6]:
             columns={
                 "Unnamed: 0": "State",
                 "Unnamed: 1": "Total",
+                "Unnamed: 14": "ST",
             }
         )
         .dropna(subset=["State", "Year"])
@@ -572,7 +573,9 @@ df_equity = (
     pd.concat(df_list_equity, ignore_index=True)
     .replace(
         {
-            "Indicator": {"Protected against neonatTetnus ": "Neonatal Protection"},
+            "Indicator": {
+                "Protected against neonatTetnus ": "Neonatal Tetanus Protection"
+            },
             "Year": {
                 "2015-16": "NFHS-4 (2015-16)",
                 "2019-21": "NFHS-5 (2019-21)",
@@ -612,6 +615,56 @@ df_equity = (
             "Other": "float64",
         }
     )
+)
+
+# equity kpis type and colour: report shown by Luigi (14/09/2022)
+# equity min-max colour: [#ff9437ff, #ae4131ff]
+equity_kpi_types = {
+    "Pregnancy": {
+        "kpis": [
+            "Any ANC",
+            "ANC4+",
+            "IFA for 100 days",
+            "Neonatal Tetanus Protection",
+        ],
+        "colour": "#3e7cabff",
+    },
+    "Birth": {
+        "kpis": ["Institutional delivery", "C-section delivery"],
+        "colour": "#64a0c9ff",
+    },
+    "Postnatal": {
+        "kpis": ["Breastfeeding 1 hour", "PNC mother 2 days", "PNC children 2 days"],
+        "colour": "#0c5e3eff",
+    },
+    "Infancy": {"kpis": ["DPT3", "Immunisation"], "colour": "#348951ff"},
+    "Childhood": {"kpis": ["Diarrhoea"], "colour": "#58a360ff"},
+}
+
+# join equity kpis type into data table
+equity_kpi_type_df = pd.DataFrame(
+    {
+        "Indicator_Type": sum(
+            [
+                [a_type] * len(equity_kpi_types[a_type]["kpis"])
+                for a_type in equity_kpi_types
+            ],
+            [],
+        ),
+        "Indicator": [
+            a_kpi
+            for a_type in equity_kpi_types
+            for a_kpi in equity_kpi_types[a_type]["kpis"]
+        ],
+        "Type_colour": sum(
+            [
+                [equity_kpi_types[a_type]["colour"]]
+                * len(equity_kpi_types[a_type]["kpis"])
+                for a_type in equity_kpi_types
+            ],
+            [],
+        ),
+    }
 )
 
 
