@@ -1,6 +1,8 @@
-from dash import callback, dcc, html, Input, Output, register_page
+import csv
+from dash import callback, dcc, html, Input, Output, State, register_page
 from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
+import pandas as pd
 from pandas.api.types import CategoricalDtype
 import plotly.express as px
 
@@ -55,6 +57,22 @@ dd_equity_round = dbc.Select(
     value="NFHS-5 (2019-21)",
     persistence=True,
     persistence_type="session",
+)
+
+# %%
+# dbc button: download datatable
+bt_dwd_equity = dbc.Button(
+    html.P(
+        ["Download Table in ", html.Code("csv")],
+        style={
+            "margin-top": "12px",
+            "fontWeight": "bold",
+        },
+    ),
+    id="btn-dwd-equity",
+    class_name="me-1",
+    outline=True,
+    color="info",
 )
 
 # %%
@@ -120,6 +138,11 @@ layout = dbc.Container(
                     ),
                     width="auto",
                 ),
+                dbc.Col(
+                    [bt_dwd_equity, dcc.Download(id="table-dwd-equity")],
+                    width="auto",
+                    style={"paddingTop": "20px"},
+                ),
             ],
             justify="evenly",
             align="center",
@@ -130,6 +153,8 @@ layout = dbc.Container(
             align="center",
             style={"paddingTop": "30px", "paddingBottom": "20px"},
         ),
+        # hidden div: share data table in Dash
+        html.Div(id="df-equity", style={"display": "none"}),
     ],
     fluid=True,
     style={"paddingTop": "20px"},
@@ -181,8 +206,12 @@ def data_bars(df, column, row_id, bar_colour):
 
 
 # %%
+# selection of datatable columns to download
+sel_col_dwd = ["Indicator_Type", "Indicator", "value", "Year", "State"]
+# create equity datatable function
 @callback(
     Output("table-col-equity", "children"),
+    Output("df-equity", "children"),
     Input("dd-states-equity", "value"),
     Input("dd-equity-round", "value"),
     Input("dd-equity-disagg", "value"),
@@ -226,7 +255,7 @@ def update_equity(state_value, round_value, disagg_value):
             }
             if i == "value"
             else {"name": i, "id": i}
-            for i in ["Indicator_Type", "Indicator", "value"]
+            for i in sel_col_dwd[:3]
         ],
         style_cell={
             # all three widths are needed
@@ -252,4 +281,31 @@ def update_equity(state_value, round_value, disagg_value):
             ],
             [],
         ),
-    )
+    ), display_df[[col for col in sel_col_dwd]].to_json(orient="split")
+
+
+# %%
+# callback to dwd datatable equity
+@callback(
+    Output("table-dwd-equity", "data"),
+    Input("btn-dwd-equity", "n_clicks"),
+    State("df-equity", "children"),
+)
+def download_equity(_, df_equity):
+    if not df_equity:
+        return None
+    else:
+
+        df = pd.read_json(df_equity, orient="split").rename(
+            columns={"value": "value [%]"}
+        )
+        # replace unit fraction as percantage
+        df.loc[:, "value [%]"] = (df["value [%]"] * 100).round(2)
+
+        return dcc.send_data_frame(
+            df.to_csv,
+            index=False,
+            encoding="utf-8-sig",
+            quoting=csv.QUOTE_NONNUMERIC,
+            filename="equity_table.csv",
+        )
