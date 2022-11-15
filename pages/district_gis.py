@@ -5,10 +5,7 @@ import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import os
 import re
-import tempfile
-from zipfile import ZipFile
 
 from . import (
     state_options,
@@ -566,16 +563,6 @@ def disp_in_district_map(india_or_state, distr_kpi, value_or_change, distr_dmn):
 
 
 # %%
-
-# helper function for closing temporary files - stackoverflow
-def close_tmp_file(tf):
-    try:
-        os.unlink(tf.name)
-        tf.close()
-    except:
-        pass
-
-
 # callback download conversion
 @callback(
     Output("table-dwd", "data"),
@@ -592,28 +579,11 @@ def download_table(_, df_table, ind_dom, ind_name):
         df = pd.read_json(df_table, orient="split")
         df["Domain"] = ind_dom
         df["Indicator"] = ind_name
-        df_temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-        df_temp_file.flush()
-        df.to_csv(
-            df_temp_file.name,
+
+        return dcc.send_data_frame(
+            df.to_csv,
             index=False,
             encoding="utf-8-sig",
             quoting=csv.QUOTE_NONNUMERIC,
-        )
-
-        # try with zip
-        zip_tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-        zf = ZipFile(zip_tf, mode="w")
-        zf.write(df_temp_file.name, "NFHS_4_5_table.csv")
-
-        # close uploaded temporary files
-        zf.close()
-        zip_tf.flush()
-        zip_tf.seek(0)
-        close_tmp_file(df_temp_file.name)
-        close_tmp_file(zip_tf.name)
-
-        return (
-            # use instead dcc.send_file (with zip --> temp direct not working)
-            dcc.send_file(zip_tf.name, filename="NFHS_4_5_table.zip")
+            filename="NFHS_4_5_table.csv",
         )
