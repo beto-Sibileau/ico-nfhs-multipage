@@ -161,7 +161,9 @@ layout = dbc.Container(
 )
 
 
-def data_bars(df, column, row_id, bar_colour):
+# %%
+# bars for total values column
+def data_bars(column, row_id, bar_colour):
     n_bins = 100
     bounds = [i * (1.0 / n_bins) for i in range(n_bins + 1)]
     col_max = 1
@@ -206,8 +208,57 @@ def data_bars(df, column, row_id, bar_colour):
 
 
 # %%
+# customized bars for equity column (per-row based)
+def data_equity_bars(
+    column,
+    row_id,
+    row_total,
+    row_top,
+    row_bot,
+    top_colour="#ae4131ff",
+    bot_colour="#ff9437ff",
+):
+
+    style = [
+        {
+            "if": {"column_id": column, "row_index": row_id},
+            "paddingBottom": 2,
+            "paddingTop": 2,
+            "background": """
+                linear-gradient(90deg,
+                white 0%,
+                white {limit_inf}%,
+                {color_below} {limit_inf}%,
+                {color_below} {total_val}%,
+                {color_above} {total_val}%,
+                {color_above} {limit_sup}%,
+                white {limit_sup}%,
+                white 100%)
+            """.format(
+                limit_inf=row_bot * 100 if row_bot < row_top else row_top * 100,
+                color_below=bot_colour if row_bot < row_top else top_colour,
+                total_val=row_total * 100,
+                color_above=top_colour if row_bot < row_top else bot_colour,
+                limit_sup=row_top * 100 if row_bot < row_top else row_bot * 100,
+            ),
+        }
+    ]
+
+    return style
+
+
+# %%
 # selection of datatable columns to download
-sel_col_dwd = ["Indicator_Type", "Indicator", "value", "Year", "State"]
+sel_col_dwd = [
+    "Indicator_Type",
+    "Indicator",
+    "value",
+    "Equity",
+    "variable",
+    "Disaggregation",
+    "Year",
+    "State",
+]
 # create equity datatable function
 @callback(
     Output("table-col-equity", "children"),
@@ -229,7 +280,7 @@ def update_equity(state_value, round_value, disagg_value):
         df_equity.query("State == @state_value & Year == @round_value")
         .melt(
             id_vars=["Indicator", "State", "Year"],
-            value_vars="Total",
+            value_vars=["Total", *tip_val],
         )
         .merge(equity_kpi_type_df, on="Indicator", how="left", sort=False)
         .astype(
@@ -243,9 +294,22 @@ def update_equity(state_value, round_value, disagg_value):
     )
     # replace percantage as unit fraction
     display_df.loc[:, "value"] = display_df.value / 100
+    # add disaggregation for download reference
+    display_df["Disaggregation"] = disagg_value
+
+    # refactor dataframe for equity display
+    disp_equity_df = display_df.query("variable=='Total'").set_index("Indicator")
+    disp_equity_df["equity_top"] = (
+        display_df.query("variable==@tip_val[0]").set_index("Indicator").value
+    )
+    disp_equity_df["equity_bot"] = (
+        display_df.query("variable==@tip_val[1]").set_index("Indicator").value
+    )
+    disp_equity_df["Equity"] = disp_equity_df.equity_top - disp_equity_df.equity_bot
+    disp_equity_df.reset_index(inplace=True)
 
     return DataTable(
-        data=display_df.to_dict("records"),
+        data=disp_equity_df.to_dict("records"),
         columns=[
             {
                 "name": i,
@@ -253,35 +317,68 @@ def update_equity(state_value, round_value, disagg_value):
                 "type": "numeric",
                 "format": FormatTemplate.percentage(0),
             }
-            if i == "value"
+            if i in ["value", "Equity"]
             else {"name": i, "id": i}
-            for i in sel_col_dwd[:3]
+            for i in sel_col_dwd[:4]
+        ],
+        tooltip_duration=7000,
+        tooltip_data=[
+            {
+                "Equity": {
+                    "value": "- "
+                    + "\n- ".join(
+                        [
+                            f"**{a_tip}**: {a_val}%"
+                            for a_tip, a_val in zip(
+                                tip_val,
+                                [
+                                    round(row["equity_top"] * 100, 2),
+                                    round(row["equity_bot"] * 100, 2),
+                                ],
+                            )
+                        ]
+                    ),
+                    "type": "markdown",
+                }
+            }
+            for row in disp_equity_df.to_dict("records")
         ],
         style_cell={
-            # all three widths are needed
-            # "minWidth": "130px",
-            # "width": "130px",
-            # "maxWidth": "130px",
             "minWidth": "100%",
             "whiteSpace": "normal",
             "textAlign": "center",
             "overflow": "hidden",
             "textOverflow": "ellipsis",
         },
-        style_cell_conditional=[{"if": {"column_id": "value"}, "width": "130px"}],
+        style_cell_conditional=[
+            {"if": {"column_id": ["value", "Equity"]}, "width": "130px"}
+        ],
         style_data_conditional=sum(
             [
-                data_bars(
-                    display_df,
-                    "value",
-                    list(display_df.query("Indicator_Type==@a_type").index),
-                    equity_kpi_types[a_type]["colour"],
-                )
-                for a_type in equity_kpi_types
+                *[
+                    data_bars(
+                        "value",
+                        list(disp_equity_df.query("Indicator_Type==@a_type").index),
+                        equity_kpi_types[a_type]["colour"],
+                    )
+                    for a_type in equity_kpi_types
+                ],
+                *[
+                    data_equity_bars(
+                        "Equity",
+                        idx,
+                        row.value,
+                        row.equity_top,
+                        row.equity_bot,
+                    )
+                    for idx, row in disp_equity_df.iterrows()
+                ],
             ],
             [],
         ),
-    ), display_df[[col for col in sel_col_dwd]].to_json(orient="split")
+    ), display_df[[col for col in sel_col_dwd if col != "Equity"]].to_json(
+        orient="split"
+    )
 
 
 # %%
