@@ -174,6 +174,23 @@ print(
     f"Ask RAKESH about PRESENCE of NON-NUMERICS in {(filter_non_num & ~filter_na).sum()} number of entries"
 )
 print(district_map_df[filter_non_num & ~filter_na].values)
+
+# prepare file to print-out and deliver to Rakesh
+list_msg_out = []
+list_msg_out.append("NFHS4-5 District compiled file.xlsx")
+list_msg_out.append(
+    f"Ask RAKESH about PRESENCE of NON-NUMERICS in {(filter_non_num & ~filter_na).sum()} number of entries:"
+)
+list_msg_out.append(", ".join(district_map_df.columns[:-1]))
+for idx, a_row in district_map_df[filter_non_num & ~filter_na].iterrows():
+    list_msg_out.append(", ".join(a_row.values[:-1].astype(str)))
+
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NULLS in {filter_na.sum()} number of entries:"
+)
+for idx, a_row in district_map_df[filter_na].iterrows():
+    list_msg_out.append(", ".join(a_row.values[:-1].astype(str)))
+
 # drop non-num
 district_map_df = (
     district_map_df.drop(district_map_df[filter_non_num & ~filter_na].index)
@@ -342,6 +359,15 @@ mask_state_dup = df_states[
 print(f"RAKESH - missing gender in {len(mask_state_dup)} rows in states data:")
 print(mask_state_dup.values)
 
+# prepare file to print-out and deliver to Rakesh
+list_msg_out.append("NFHS345.xlsx")
+list_msg_out.append(
+    f"RAKESH - missing gender in {len(mask_state_dup)} rows in states data:"
+)
+list_msg_out.append(", ".join(mask_state_dup.columns))
+for idx, a_row in mask_state_dup.iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
+
 # now drop duplicates in missing gender specification - inplace
 df_states.drop_duplicates(
     subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
@@ -506,8 +532,34 @@ dist_state_kpi_df.loc[
 
 
 # %%
-# filter uncleaned data in numerical columns
+# detect uncleaned data in numerical columns
 num_cols = ["Urban", "Rural", "Total"]
+# prepare file to print-out and deliver to Rakesh
+mask_nan_arrays = np.logical_or.reduce(
+    [
+        pd.to_numeric(df_nfhs_345[col], errors="coerce").isnull()
+        & ~df_nfhs_345[col].isnull()
+        for col in num_cols
+    ]
+)
+mask_a_null_arrays = np.logical_or.reduce(
+    [df_nfhs_345[col].isnull() for col in num_cols]
+)
+
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NON-NUMERICS in {mask_nan_arrays.sum()} rows in states data:"
+)
+for idx, a_row in df_nfhs_345[mask_nan_arrays].iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
+
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NULLS in {(mask_a_null_arrays & ~mask_nan_arrays).sum()} rows in states data:"
+)
+for idx, a_row in df_nfhs_345[mask_a_null_arrays & ~mask_nan_arrays].iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
+
+
+# filter uncleaned data in numerical columns
 for col in num_cols:
     filter_na_345 = df_nfhs_345[col].isnull()
     filter_non_num_345 = pd.to_numeric(df_nfhs_345[col], errors="coerce").isnull()
@@ -616,6 +668,34 @@ df_equity = (
         }
     )
 )
+
+# data cleaning report for equity: print-out and deliver to Rakesh
+num_cols_equity = df_equity.columns[1:-2]
+mask_nan_in_equity = np.logical_or.reduce(
+    [
+        pd.to_numeric(df_equity[col], errors="coerce").isnull()
+        & ~df_equity[col].isnull()
+        for col in num_cols_equity
+    ]
+)
+mask_a_null_equity = np.logical_or.reduce(
+    [df_equity[col].isnull() for col in num_cols_equity]
+)
+
+# report equity data cleaning (sept. 2022 non-numeric free)
+list_msg_out.append("Equity_Analysis.xlsx")
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NON-NUMERICS in {mask_nan_in_equity.sum()} rows in equity data:"
+)
+list_msg_out.append(", ".join(df_equity.columns))
+for idx, a_row in df_equity[mask_nan_in_equity].iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
+
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NULLS in {(mask_a_null_equity & ~mask_nan_in_equity).sum()} rows in equity data:"
+)
+for idx, a_row in df_equity[mask_a_null_equity & ~mask_nan_in_equity].iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
 
 # equity kpis type and colour: report shown by Luigi (14/09/2022)
 # equity min-max colour: [#ff9437ff, #ae4131ff]
@@ -760,6 +840,15 @@ for an_entry in checked_aspir_entries:
         an_entry, checked_aspir_entries[an_entry].keys()
     ] = checked_aspir_entries[an_entry].values()
 
+
+# %%
+# write output file to DBFS
+out_filename = "etl_print_out.txt"
+with open(out_filename, "w") as local_file:
+    local_file.write("\n".join(list_msg_out))
+
+
+# %%
 # # check dictionary validation
 # count_aspi = 0
 # for an_aspi in aspir_dist_df["State, District"].values:
