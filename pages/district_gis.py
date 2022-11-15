@@ -576,7 +576,18 @@ def download_table(_, df_table, ind_dom, ind_name):
     if not df_table:
         return None
     else:
-        df = pd.read_json(df_table, orient="split")
+        df = pd.read_json(df_table, orient="split").rename(
+            columns={
+                "NFHS-4": "NFHS-4 [%]",
+                "NFHS-5": "NFHS-5 [%]",
+                "Abs. Change": "Abs. Change [%]",
+            }
+        )
+        # replace unit fraction as percantage
+        df.loc[:, "NFHS-4 [%]"] = (df["NFHS-4 [%]"] * 100).round(2)
+        df.loc[:, "NFHS-5 [%]"] = (df["NFHS-5 [%]"] * 100).round(2)
+        df.loc[:, "Abs. Change [%]"] = (df["Abs. Change [%]"] * 100).round(2)
+
         df["Domain"] = ind_dom
         df["Indicator"] = ind_name
 
