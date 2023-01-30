@@ -310,33 +310,43 @@ df_india["State"] = "India"
 # drop first row
 df_india.drop(0, inplace=True)
 
-# concat column NFHS-4 as new rows with total only
-df_india_45 = (
-    pd.concat(
-        [
-            df_india[
-                ["Indicator", "NFHS-4 (2015-16)", "Indicator Type", "Gender", "State"]
-            ].rename(columns={"NFHS-4 (2015-16)": "Total"}),
-            df_india.drop(columns="NFHS-4 (2015-16)"),
-        ],
-        ignore_index=True,
-    ).fillna({"NFHS": "NFHS 4", "Year (give as a period)": "2016"})
-    # drop duplicates if missing gender specification
-    .drop_duplicates(
-        subset=["Indicator Type", "Indicator", "Gender", "NFHS"],
-        keep=False,
-        ignore_index=True,
-    )
-    # replace gender values
-    # .replace(
-    #     {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Men"}}, regex=True
-    # )
-)
+# concat column NFHS-4 as new rows with total only - DO NOT ingest (Rakesh requested)
+# df_india_45 = (
+#     pd.concat(
+#         [
+#             df_india[
+#                 ["Indicator", "NFHS-4 (2015-16)", "Indicator Type", "Gender", "State"]
+#             ].rename(columns={"NFHS-4 (2015-16)": "Total"}),
+#             df_india.drop(columns="NFHS-4 (2015-16)"),
+#         ],
+#         ignore_index=True,
+#     ).fillna({"NFHS": "NFHS 4", "Year (give as a period)": "2016"})
+#     # drop duplicates if missing gender specification
+#     .drop_duplicates(
+#         subset=["Indicator Type", "Indicator", "Gender", "NFHS"],
+#         keep=False,
+#         ignore_index=True,
+#     )
+# replace gender values
+# .replace(
+#     {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Men"}}, regex=True
+# )
+# )
 
 # %%
 # Data read 3: compiled states xls
 df_states = (
-    pd.read_excel("./datasets/NFHS345.xlsx", sheet_name=0, dtype=str)
+    pd.read_excel("./datasets/NFHS345.xlsx", sheet_name=1, dtype=str)
+    # drop blanks for Indicator Type (new file)
+    .dropna(subset=["Indicator Type"])
+    # standardize Indicator Types (new file)
+    .replace(
+        {
+            "Indicator Type": {
+                "Tobacco Use and Alcohol Consumption among Adults (age 15-49 years)": "Tobacco Use and Alcohol Consumption among Adults (age 15 years and above)"
+            }
+        }
+    )
     # drop duplicates if missing gender specification
     # .drop_duplicates(
     #     subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
@@ -348,6 +358,105 @@ df_states = (
     #     {"Gender": {"(?i)(female)": "Female", r"(?i)(\bmale\b)": "Male"}}, regex=True
     # )
 )
+
+# miss information treatment for gender (new file exceptions)
+df_states.loc[
+    df_states.Indicator == "All women age 15-19 years who are anaemic (%)", "Gender"
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Women who use any kind of tobacco (%)", "Gender"
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Men age 15 years and above who use any kind of tobacco (%)",
+    "Gender",
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Women age 15 years and above who consume alcohol (%)",
+    "Gender",
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Men age 15 years and above who consume alcohol (%)",
+    "Gender",
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Ever undergone a breast examination for breast cancer (%)",
+    "Gender",
+] = np.nan
+df_states.loc[
+    df_states.Indicator == "Ever undergone a screening test for cervical cancer (%)",
+    "Gender",
+] = np.nan
+df_states.loc[
+    (
+        df_states.Indicator
+        == "Ever undergone an oral cavity examination for oral cancer (%)"
+        & df_states["Indicator Type"]
+        == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+    ),
+    "Gender",
+] = "Female"
+# miss information treatment for Indicator Type (new file exceptions)
+df_states.loc[
+    df_states.Indicator == "Births attended by skilled health personnel (%)",
+    "Indicator Type",
+] = "Delivery Care (for births in the 5 years before the survey)"
+df_states.loc[
+    df_states.Indicator == "Ever undergone a breast examination for breast cancer (%)",
+    "Indicator Type",
+] = "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+df_states.loc[
+    df_states.Indicator == "Ever undergone a screening test for cervical cancer (%)",
+    "Indicator Type",
+] = "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+df_states.loc[
+    (
+        df_states.Indicator
+        == "Ever undergone an oral cavity examination for oral cancer (%)"
+        & df_states["Indicator Type"]
+        == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+    ),
+    "Indicator Type",
+] = "Screening for Cancer among Adults (age 30-49 years)"
+df_states.loc[
+    df_states.Indicator == "Institutional births (%)",
+    "Indicator Type",
+] = "Delivery Care (for births in the 5 years before the survey)"
+df_states.loc[
+    df_states.Indicator == "Men who are overweight or obese (BMI =25.0 kg/m) (%)",
+    "Indicator Type",
+] = "Nutritional Status of Adults (age 15-49 years)"
+df_states.loc[
+    df_states.Indicator
+    == "Men whose Body Mass Index (BMI) is below normal (BMI <18.5 kg/m) (%)",
+    "Indicator Type",
+] = "Nutritional Status of Adults (age 15-49 years)"
+df_states.loc[
+    df_states.Indicator
+    == "Mothers who consumed iron folic acid for 100 days or more when they were pregnant (%)",
+    "Indicator Type",
+] = "Maternity Care (for last birth in the 5 years before the survey)"
+df_states.loc[
+    df_states.Indicator
+    == "Mothers who received postnatal care from a doctor/nurse/LHV/ANM/midwife/other health personnel within 2 days of delivery (%)",
+    "Indicator Type",
+] = "Maternity Care (for last birth in the 5 years before the survey)"
+df_states.loc[
+    df_states.Indicator == "Total unmet need (%)",
+    "Indicator Type",
+] = "Current Use of Family Planning Methods (currently married women age 15–49 years)"
+df_states.loc[
+    df_states.Indicator == "Unmet need for spacing (%)",
+    "Indicator Type",
+] = "Current Use of Family Planning Methods (currently married women age 15–49 years)"
+df_states.loc[
+    df_states.Indicator == "Women who are overweight or obese (BMI =25.0 kg/m) (%)",
+    "Indicator Type",
+] = "Nutritional Status of Adults (age 15-49 years)"
+df_states.loc[
+    df_states.Indicator
+    == "Women whose Body Mass Index (BMI) is below normal (BMI <18.5 kg/m) (%)",
+    "Indicator Type",
+] = "Nutritional Status of Adults (age 15-49 years)"
 
 # print for Rakesh missing gender entries
 mask_state_dup = df_states[
@@ -390,7 +499,8 @@ df_nfhs_345 = (
     pd.concat(
         [
             df_states,
-            df_india_45,
+            # DO NOT ingest separated india file (suggested by Rakesh)
+            # df_india_45,
         ],
         ignore_index=True,
     ).replace({"State": {r"(?i)(\bindia\b)": "All India"}}, regex=True)
