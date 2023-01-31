@@ -241,6 +241,9 @@ def update_trend(selections, residence):
 
     if not state_values or not kpi_values:
         return label_no_fig
+    elif len(state_values) * len(kpi_values) > 500:
+        # limit maximum number of series
+        return label_no_fig
 
     display_df = (
         df_nfhs_345.query("State in @state_values & Indicator in @kpi_values")

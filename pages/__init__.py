@@ -388,10 +388,14 @@ df_states.loc[
 ] = np.nan
 df_states.loc[
     (
-        df_states.Indicator
-        == "Ever undergone an oral cavity examination for oral cancer (%)"
-        & df_states["Indicator Type"]
-        == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+        (
+            df_states.Indicator
+            == "Ever undergone an oral cavity examination for oral cancer (%)"
+        )
+        & (
+            df_states["Indicator Type"]
+            == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+        )
     ),
     "Gender",
 ] = "Female"
@@ -410,10 +414,14 @@ df_states.loc[
 ] = "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
 df_states.loc[
     (
-        df_states.Indicator
-        == "Ever undergone an oral cavity examination for oral cancer (%)"
-        & df_states["Indicator Type"]
-        == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+        (
+            df_states.Indicator
+            == "Ever undergone an oral cavity examination for oral cancer (%)"
+        )
+        & (
+            df_states["Indicator Type"]
+            == "Women Age 15-49 Years Who Have Ever Undergone Examinations of:"
+        )
     ),
     "Indicator Type",
 ] = "Screening for Cancer among Adults (age 30-49 years)"
@@ -516,6 +524,10 @@ df_nfhs_345 = (
 df_nfhs_345.loc[df_nfhs_345.Gender.notna(), "Indicator Type"] = df_nfhs_345[
     df_nfhs_345.Gender.notna()
 ][["Indicator Type", "Gender"]].agg(" - ".join, axis=1)
+# enhance Indicator name with Gender to avoid duplicated Indicator names
+df_nfhs_345.loc[df_nfhs_345.Gender.notna(), "Indicator"] = df_nfhs_345[
+    df_nfhs_345.Gender.notna()
+][["Indicator", "Gender"]].agg(" - ".join, axis=1)
 
 # retain Indicator Types - Indicator combinations
 nfhs_345_ind_df = df_nfhs_345.groupby(
