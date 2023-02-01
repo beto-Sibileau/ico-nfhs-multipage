@@ -6,7 +6,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 import plotly.express as px
 
-from . import df_equity, equity_kpi_type_df, equity_kpi_types
+from . import df_equity, equity_kpi_type_df, equity_kpi_types, label_no_fig
 
 register_page(__name__, path="/state-equity", title="State Equity")
 
@@ -38,7 +38,13 @@ dd_states_equity = dbc.Select(
 
 # %%
 # dbc Select one disaggregation
-selected_disaggregation = ["Wealth", "Residence", "Women's Education"]
+selected_disaggregation = [
+    "Wealth",
+    "Residence",
+    "Women's Education",
+    "Caste",
+    "Religion",
+]
 dd_equity_disagg = dbc.Select(
     id="dd-equity-disagg",
     options=[{"label": l, "value": l} for l in selected_disaggregation],
@@ -73,6 +79,22 @@ bt_dwd_equity = dbc.Button(
     class_name="me-1",
     outline=True,
     color="info",
+)
+
+# %%
+# dbc Select Top disaggregation
+dd_equity_top = dbc.Select(
+    id="dd-equity-top",
+    persistence=True,
+    persistence_type="session",
+)
+
+# %%
+# dbc Select Bottom disaggregation
+dd_equity_bot = dbc.Select(
+    id="dd-equity-bot",
+    persistence=True,
+    persistence_type="session",
 )
 
 # %%
@@ -148,6 +170,67 @@ layout = dbc.Container(
             align="center",
         ),
         dbc.Row(
+            dbc.Col(dcc.Graph(id="state-equity-plot", figure=label_no_fig), width=12),
+            justify="evenly",
+            align="center",
+        ),
+        dbc.Row(
+            dbc.Col(
+                html.Label(
+                    "Equity Table", style={"color": "MidnightBlue", "fontSize": "18px"}
+                ),
+                width="auto",
+            ),
+            justify="center",
+            align="center",
+            style={"paddingTop": "10px"},
+        ),
+        dbc.Row(
+            [
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.P(
+                                "Select Top Category",
+                                style={
+                                    "fontWeight": "bold",  # 'normal', #
+                                    "textAlign": "left",  # 'center', #
+                                    # 'paddingTop': '25px',
+                                    "color": "DeepSkyBlue",
+                                    "fontSize": "16px",
+                                    "marginBottom": "10px",
+                                },
+                            ),
+                            dd_equity_top,
+                        ]
+                    ),
+                    width="auto",
+                ),
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.P(
+                                "Select Bottom Category",
+                                style={
+                                    "fontWeight": "bold",  # 'normal', #
+                                    "textAlign": "left",  # 'center', #
+                                    # 'paddingTop': '25px',
+                                    "color": "DeepSkyBlue",
+                                    "fontSize": "16px",
+                                    "marginBottom": "10px",
+                                },
+                            ),
+                            dd_equity_bot,
+                        ]
+                    ),
+                    width="auto",
+                ),
+            ],
+            justify="center",
+            align="center",
+            style={"paddingTop": "15px"},
+        ),
+        dbc.Row(
             dbc.Col(id="table-col-equity", width="auto"),
             justify="evenly",
             align="center",
@@ -155,6 +238,8 @@ layout = dbc.Container(
         ),
         # hidden div: share data table in Dash
         html.Div(id="df-equity", style={"display": "none"}),
+        # share data in Dash with store element
+        dcc.Store(id="selections"),
     ],
     fluid=True,
     style={"paddingTop": "20px"},
@@ -248,12 +333,15 @@ def data_equity_bars(
 
 
 # %%
+# equity table column names
+col_total = "Total value"
+col_equity = "Top - Bottom"
 # selection of datatable columns to download
 sel_col_dwd = [
-    "Indicator_Type",
+    "Indicator Type",
     "Indicator",
-    "value",
-    "Equity",
+    col_total,
+    col_equity,
     "variable",
     "Disaggregation",
     "Year",
@@ -261,26 +349,43 @@ sel_col_dwd = [
 ]
 # create equity datatable function
 @callback(
-    Output("table-col-equity", "children"),
     Output("df-equity", "children"),
+    Output("state-equity-plot", "figure"),
+    Output("selections", "data"),
     Input("dd-states-equity", "value"),
     Input("dd-equity-round", "value"),
     Input("dd-equity-disagg", "value"),
 )
-def update_equity(state_value, round_value, disagg_value):
+def update_equity_plot(state_value, round_value, disagg_value):
 
     if disagg_value == "Residence":
+        col_map = ["Rural", "Urban"]
         tip_val = ["Urban", "Rural"]
     elif disagg_value == "Wealth":
+        col_map = ["Poorest", "Poor", "Middle", "Rich", "Richest"]
         tip_val = ["Richest", "Poorest"]
     elif disagg_value == "Women's Education":
+        col_map = [
+            "No education",
+            "Primary education",
+            "Secondary education",
+            "Higher education",
+        ]
         tip_val = ["Higher education", "No education"]
+    elif disagg_value == "Caste":
+        col_map = ["SC", "ST", "OBC", "Others"]
+        tip_val = ["OBC", "SC"]
+    elif disagg_value == "Religion":
+        col_map = ["Hindu", "Muslim", "Other"]
+        tip_val = ["Hindu", "Muslim"]
 
+    # bar colors
+    bar_colors = ["Total", *col_map]
     display_df = (
         df_equity.query("State == @state_value & Year == @round_value")
         .melt(
             id_vars=["Indicator", "State", "Year"],
-            value_vars=["Total", *tip_val],
+            value_vars=bar_colors,
         )
         .merge(equity_kpi_type_df, on="Indicator", how="left", sort=False)
         .astype(
@@ -290,95 +395,176 @@ def update_equity(state_value, round_value, disagg_value):
                 )
             }
         )
+        .round({"value": 2})
         .sort_values(by=["Indicator_Type", "Indicator"])
     )
-    # replace percantage as unit fraction
-    display_df.loc[:, "value"] = display_df.value / 100
+
+    # display_df in bars
+    fig = (
+        px.bar(
+            display_df,
+            x="Indicator",
+            y="value",
+            color="variable",
+            barmode="group",
+            title="Equity Plot",
+        )
+        .update_yaxes(range=[0, 100])
+        .update_layout(title_x=0.5, xaxis_title=None)
+    )
+
     # add disaggregation for download reference
     display_df["Disaggregation"] = disagg_value
-
-    # refactor dataframe for equity display
-    disp_equity_df = display_df.query("variable=='Total'").set_index("Indicator")
-    disp_equity_df["equity_top"] = (
-        display_df.query("variable==@tip_val[0]").set_index("Indicator").value
+    # prettify column names
+    display_df.rename(
+        columns={"value": col_total, "Indicator_Type": "Indicator Type"},
+        inplace=True,
     )
-    disp_equity_df["equity_bot"] = (
-        display_df.query("variable==@tip_val[1]").set_index("Indicator").value
-    )
-    disp_equity_df["Equity"] = disp_equity_df.equity_top - disp_equity_df.equity_bot
-    disp_equity_df.reset_index(inplace=True)
 
-    return DataTable(
-        data=disp_equity_df.to_dict("records"),
-        columns=[
-            {
-                "name": i,
-                "id": i,
-                "type": "numeric",
-                "format": FormatTemplate.percentage(0),
-            }
-            if i in ["value", "Equity"]
-            else {"name": i, "id": i}
-            for i in sel_col_dwd[:4]
-        ],
-        tooltip_duration=7000,
-        tooltip_data=[
-            {
-                "Equity": {
-                    "value": "- "
-                    + "\n- ".join(
-                        [
-                            f"**{a_tip}**: {a_val}%"
-                            for a_tip, a_val in zip(
-                                tip_val,
-                                [
-                                    round(row["equity_top"] * 100, 2),
-                                    round(row["equity_bot"] * 100, 2),
-                                ],
-                            )
-                        ]
-                    ),
-                    "type": "markdown",
-                }
-            }
-            for row in disp_equity_df.to_dict("records")
-        ],
-        style_cell={
-            "minWidth": "100%",
-            "whiteSpace": "normal",
-            "textAlign": "center",
-            "overflow": "hidden",
-            "textOverflow": "ellipsis",
-        },
-        style_cell_conditional=[
-            {"if": {"column_id": ["value", "Equity"]}, "width": "130px"}
-        ],
-        style_data_conditional=sum(
-            [
-                *[
-                    data_bars(
-                        "value",
-                        list(disp_equity_df.query("Indicator_Type==@a_type").index),
-                        equity_kpi_types[a_type]["colour"],
-                    )
-                    for a_type in equity_kpi_types
-                ],
-                *[
-                    data_equity_bars(
-                        "Equity",
-                        idx,
-                        row.value,
-                        row.equity_top,
-                        row.equity_bot,
-                    )
-                    for idx, row in disp_equity_df.iterrows()
-                ],
-            ],
-            [],
+    return (
+        display_df[[col for col in sel_col_dwd if col != col_equity]].to_json(
+            orient="split"
         ),
-    ), display_df[[col for col in sel_col_dwd if col != "Equity"]].to_json(
-        orient="split"
+        fig,
+        {"tip_val": tip_val, "col_map": bar_colors},
     )
+
+
+# %%
+# callback to update top bottom selectors
+@callback(
+    Output("dd-equity-top", "value"),
+    Output("dd-equity-top", "options"),
+    Output("dd-equity-bot", "value"),
+    Output("dd-equity-bot", "options"),
+    Input("selections", "data"),
+)
+def update_top_bottom(data_selected):
+    if not data_selected:
+        return "", [], "", []
+    else:
+        return (
+            data_selected["tip_val"][0],
+            [{"label": l, "value": l} for l in data_selected["col_map"]],
+            data_selected["tip_val"][1],
+            [{"label": l, "value": l} for l in data_selected["col_map"]],
+        )
+
+
+# %%
+# callback to display datatable equity
+@callback(
+    Output("table-col-equity", "children"),
+    Input("df-equity", "children"),
+    Input("dd-equity-top", "value"),
+    Input("dd-equity-bot", "value"),
+)
+def update_equity_table(df_equity, top_value, bot_value):
+    if not df_equity:
+        return None
+    else:
+        df = pd.read_json(df_equity, orient="split").rename(
+            columns={
+                "value": col_total,
+                "Indicator_Type": "Indicator Type",
+            }
+        )
+
+        # replace percantage as unit fraction
+        df.loc[:, col_total] = df[col_total] / 100
+        # refactor dataframe for equity display
+        disp_equity_df = df.query("variable=='Total'").set_index("Indicator")
+
+        # calculate top-bottom difference
+        disp_equity_df["equity_top"] = df.query("variable==@top_value").set_index(
+            "Indicator"
+        )[col_total]
+        disp_equity_df["equity_bot"] = df.query("variable==@bot_value").set_index(
+            "Indicator"
+        )[col_total]
+        disp_equity_df[col_equity] = (
+            disp_equity_df.equity_top - disp_equity_df.equity_bot
+        )
+        disp_equity_df.reset_index(inplace=True)
+
+        return (
+            DataTable(
+                data=disp_equity_df.to_dict("records"),
+                columns=[
+                    {
+                        "name": i,
+                        "id": i,
+                        "type": "numeric",
+                        "format": FormatTemplate.percentage(0),
+                    }
+                    if i in [col_total, col_equity]
+                    else {"name": i, "id": i}
+                    for i in sel_col_dwd[:4]
+                ],
+                tooltip_duration=7000,
+                tooltip_data=[
+                    {
+                        col_equity: {
+                            "value": "- "
+                            + "\n- ".join(
+                                [
+                                    f"**{a_tip}**: {a_val}%"
+                                    for a_tip, a_val in zip(
+                                        [top_value, bot_value],
+                                        [
+                                            round(row["equity_top"] * 100, 2),
+                                            round(row["equity_bot"] * 100, 2),
+                                        ],
+                                    )
+                                ]
+                            ),
+                            "type": "markdown",
+                        }
+                    }
+                    for row in disp_equity_df.to_dict("records")
+                ],
+                style_cell={
+                    "minWidth": "100%",
+                    "whiteSpace": "normal",
+                    "textAlign": "center",
+                    "overflow": "hidden",
+                    "textOverflow": "ellipsis",
+                },
+                style_cell_conditional=[
+                    {
+                        "if": {"column_id": [col_total]},
+                        "width": "130px",
+                    }
+                ],
+                style_data_conditional=sum(
+                    [
+                        *[
+                            data_bars(
+                                col_total,
+                                list(
+                                    disp_equity_df.query(
+                                        "`Indicator Type`==@a_type"
+                                    ).index
+                                ),
+                                equity_kpi_types[a_type]["colour"],
+                            )
+                            for a_type in equity_kpi_types
+                        ],
+                        # *[
+                        #     data_equity_bars(
+                        #         col_equity,
+                        #         idx,
+                        #         row[col_total],
+                        #         row.equity_top,
+                        #         row.equity_bot,
+                        #     )
+                        #     for idx, row in disp_equity_df.iterrows()
+                        # ],
+                    ],
+                    [],
+                ),
+            ),
+        )
 
 
 # %%
@@ -388,16 +574,16 @@ def update_equity(state_value, round_value, disagg_value):
     Input("btn-dwd-equity", "n_clicks"),
     State("df-equity", "children"),
 )
-def download_equity(_, df_equity):
-    if not df_equity:
+def download_equity(_, df_plotted):
+    if not df_plotted:
         return None
     else:
 
-        df = pd.read_json(df_equity, orient="split").rename(
-            columns={"value": "value [%]"}
+        df = pd.read_json(df_plotted, orient="split").rename(
+            columns={col_total: "value [%]"}
         )
         # replace unit fraction as percantage
-        df.loc[:, "value [%]"] = (df["value [%]"] * 100).round(2)
+        # df.loc[:, "value [%]"] = (df["value [%]"] * 100).round(2)
 
         return dcc.send_data_frame(
             df.to_csv,
