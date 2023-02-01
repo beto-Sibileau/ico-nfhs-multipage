@@ -466,13 +466,13 @@ df_states.loc[
     "Indicator Type",
 ] = "Nutritional Status of Adults (age 15-49 years)"
 
-# print for Rakesh missing gender entries
+# print for Rakesh missing gender entries (ignore Indicator Type)
 mask_state_dup = df_states[
     df_states.duplicated(
-        subset=["Indicator Type", "Indicator", "State", "Gender", "NFHS"],
+        subset=["Indicator", "State", "Gender", "NFHS"],
         keep=False,
     )
-]
+].sort_values(["State", "Indicator"])
 print(f"RAKESH - missing gender in {len(mask_state_dup)} rows in states data:")
 print(mask_state_dup.values)
 
