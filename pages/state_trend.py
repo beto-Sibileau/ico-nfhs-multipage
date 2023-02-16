@@ -1,8 +1,6 @@
 from dash import callback, dcc, html, Input, Output, register_page
 import dash_bootstrap_components as dbc
 import dash_treeview_antd
-import numpy as np
-import pandas as pd
 import plotly.express as px
 
 from . import (
@@ -20,7 +18,7 @@ register_page(__name__, path="/state-trend", title="State Trends")
 states_index = {str(i): a_state for i, a_state in enumerate(nfhs_345_states)}
 
 selection_tree = {
-    "title": "",
+    "title": "Select all",
     "key": "0",
     "children": [
         {"title": a_state, "key": "0-" + i} for i, a_state in states_index.items()
@@ -53,7 +51,7 @@ dd_menu_states = dbc.DropdownMenu(
 # %%
 # selection tree for kpis
 kpi_selection_tree = {
-    "title": "",
+    "title": "Select all",
     "key": "0",
     "children": [
         {
