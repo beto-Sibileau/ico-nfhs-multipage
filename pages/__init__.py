@@ -726,8 +726,6 @@ equity_org_df = pd.read_excel(
 )
 # indicators sheet name column
 ind_data_col = "Indicator_sheet"
-# equity data column
-equity_data_col = "Equity_Categories"
 
 # single ingestion pd.series
 single_ing = (
@@ -739,6 +737,15 @@ single_ing = (
 )
 # multi ingestion array
 multi_ing = np.setdiff1d(equity_org_df.Indicator_sheet.dropna(), single_ing)
+
+# equity data column (categories)
+equity_data_col = "Equity_Categories"
+# equity domain column
+equity_dom_col = "Equity_Domains"
+# equity default category A
+equity_cat_a_col = "Default_Cat_A"
+# equity default category B
+equity_cat_b_col = "Default_Cat_B"
 
 # available disaggregation categories (must be unique)
 all_disagg = equity_org_df[equity_data_col].dropna().unique()
@@ -987,6 +994,26 @@ equity_kpi_type_df = pd.DataFrame(
     }
 )
 
+# %%
+# domains and categories: equity page dynamic design
+equity_dom_cat = {
+    a_dom: {
+        "categories": equity_org_df.query(f"`{equity_dom_col}` == '''{a_dom}'''")[
+            equity_data_col
+        ].values,
+        "a_b_categories": np.concatenate(
+            [
+                equity_org_df.query(
+                    f"`{equity_dom_col}` == '''{a_dom}''' & `{equity_cat_a_col}` == 'True'"
+                )[equity_data_col].values,
+                equity_org_df.query(
+                    f"`{equity_dom_col}` == '''{a_dom}''' & `{equity_cat_b_col}` == 'True'"
+                )[equity_data_col].values,
+            ]
+        ),
+    }
+    for a_dom in equity_org_df[equity_dom_col].dropna().unique()
+}
 
 # %%
 # aspirational and other districts classification
