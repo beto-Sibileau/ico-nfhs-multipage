@@ -720,17 +720,87 @@ district_state_match = {
 }
 
 # %%
+# read table for indicators organization
+equity_org_df = pd.read_excel(
+    "./datasets/Equity_Analysis.xlsx", sheet_name="Template", dtype=str
+)
+# indicators sheet name column
+ind_data_col = "Indicator_sheet"
+# equity data column
+equity_data_col = "Equity_Categories"
+
+# single ingestion pd.series
+single_ing = (
+    equity_org_df[ind_data_col]
+    .dropna()
+    .value_counts()
+    .reset_index()
+    .query("Indicator_sheet == 1")["index"]
+)
+# multi ingestion array
+multi_ing = np.setdiff1d(equity_org_df.Indicator_sheet.dropna(), single_ing)
+
+# available disaggregation categories (must be unique)
+all_disagg = equity_org_df[equity_data_col].dropna().unique()
+
+# %%
 # first design: do not share data between pages
 # (assess performance later)
 equity_df = pd.read_excel(
     "./datasets/Equity_Analysis.xlsx", sheet_name=None, dtype=str, header=2
 )
+# strip keys for robust performance in Excel Equity sheet names
+equity_df = {key.strip(): value for key, value in equity_df.items()}
+
+# pre-stablished states names in equity file
+state_names_equity = [
+    "Andaman and Nicobar Islands",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chandigarh",
+    "Chhattisgarh",
+    "Dadra and Nagar Haveli",
+    "Daman and Diu",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jammu and Kashmir",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Ladakh",
+    "Lakshadweep",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Nct of Delhi",
+    "Odisha",
+    "Puducherry",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+    "Telangana",
+    "All India",
+]
 
 # %%
-# equity xls: concat excel sheets per added indicator
+# equity xls: concat excel sheets per added indicator (single ingestion)
 df_list_equity = []
-for name in list(equity_df.keys())[:12]:
-    equity_df[name]["Indicator"] = name
+for name in single_ing:
+    equity_df[name]["Indicator"] = equity_org_df.query(
+        "Indicator_sheet == @name"
+    ).Indicator_name.item()
     df_list_equity.append(
         equity_df[name]
         .rename(
@@ -741,54 +811,78 @@ for name in list(equity_df.keys())[:12]:
             }
         )
         .dropna(subset=["State", "Year"])
+        # data cleaning in Excel files ("intermediate columns")
+        .dropna(axis="columns", how="all")
     )
 
+for ind_type in multi_ing:
+    ind_type_df = equity_df[ind_type].rename(columns={"Unnamed: 0": "State"})
+    ind_type_disagg = ind_type_df.columns[
+        ~ind_type_df.columns.str.contains("unnamed|year|state", regex=True, case=False)
+    ]
+    ind_names_in_type = (
+        ind_type_df.iloc[0, :]
+        .reset_index()
+        .rename(columns={"index": "col_name", 0: "ind_name"})
+    )
+    # year column particular treatment
+    ind_type_df.rename(
+        columns={ind_names_in_type.query("ind_name == 'Year'").col_name.item(): "Year"},
+        inplace=True,
+    )
+    for name in equity_org_df.query("Indicator_sheet == @ind_type").Indicator_name:
+        # extract columns by indicator name
+        col_ext = ind_names_in_type.query("ind_name == @name").col_name.values
+        ind_df = (
+            ind_type_df[["State", *col_ext, "Year"]].dropna(subset=["State", "Year"])
+            # data cleaning in Excel files ("intermediate columns")
+            .dropna(axis="columns", how="all")
+            # rename col_ext to match available disaggregation
+            .rename(columns={k: v for k, v in zip(col_ext, ind_type_disagg)})
+        )
+        # add the indicator name
+        ind_df["Indicator"] = name
+        df_list_equity.append(ind_df)
+
 df_equity = (
-    pd.concat(df_list_equity, ignore_index=True)
+    pd.concat(df_list_equity, ignore_index=True)[
+        ["State", *all_disagg, "Year", "Indicator"]
+    ]
     .replace(
         {
-            "Indicator": {
-                "Protected against neonatTetnus ": "Neonatal Tetanus Protection"
-            },
             "Year": {
                 "2015-16": "NFHS-4 (2015-16)",
                 "2019-21": "NFHS-5 (2019-21)",
                 "2019-2021": "NFHS-5 (2019-21)",
-            },
-            "State": {
-                "India": "All India",
-                "Jammu And Kashmir": "Jammu and Kashmir",
-                "Andaman And Nicobar Islands": "Andaman and Nicobar Islands",
-                "Andaman & Nicobar Isl": "Andaman and Nicobar Islands",
-                "Dadra & Nagar Haveli": "Dadra and Nagar Haveli",
-                "Delhi": "Nct of Delhi",
-                "Nct Of Delhi": "Nct of Delhi",
-            },
+            }
         }
     )
-    .astype(
+    # standardize names in equity
+    .replace(
+        {"State": {rf"(?i)({v})": v for v in state_names_equity}},
+        regex=True,
+    )
+    .replace(
         {
-            "Total": "float64",
-            "Rural": "float64",
-            "Urban": "float64",
-            "Poorest": "float64",
-            "Poor": "float64",
-            "Middle": "float64",
-            "Rich": "float64",
-            "Richest": "float64",
-            "No education": "float64",
-            "Primary education": "float64",
-            "Secondary education": "float64",
-            "Higher education": "float64",
-            "SC": "float64",
-            "ST": "float64",
-            "OBC": "float64",
-            "Others": "float64",
-            "Hindu": "float64",
-            "Muslim": "float64",
-            "Other": "float64",
-        }
+            "State": {
+                r"(?i)(India)": "All India",
+                r"(?i)(Jammu And Kashmir)": "Jammu and Kashmir",
+                r"(?i)(Jammu & Kashmir)": "Jammu and Kashmir",
+                r"(?i)(\bAndaman and Nicobar Island\b)": "Andaman and Nicobar Islands",
+                r"(?i)(\bAndaman And Nicobar Islands\b)": "Andaman and Nicobar Islands",
+                r"(?i)(\bAndaman & Nicobar Isl\b)": "Andaman and Nicobar Islands",
+                r"(?i)(\bandaman and nicobar i\b)": "Andaman and Nicobar Islands",
+                r"(?i)(\bDadra & Nagar Haveli\b)": "Dadra and Nagar Haveli",
+                r"(?i)(\bdadra and nagar havel\b)": "Dadra and Nagar Haveli",
+                r"(?:^|,)(Delhi)(?:,|$)": "Nct of Delhi",
+                r"(?:^|,)(delhi)(?:,|$)": "Nct of Delhi",
+                r"(?i)(Nct Of Delhi)": "Nct of Delhi",
+            },
+        },
+        regex=True,
     )
+    # astype linked with template ingestion variable all_disagg
+    .astype({a_col: "float64" for a_col in all_disagg})
 )
 
 # data cleaning report for equity: print-out and deliver to Rakesh
@@ -803,14 +897,24 @@ mask_nan_in_equity = np.logical_or.reduce(
 mask_a_null_equity = np.logical_or.reduce(
     [df_equity[col].isnull() for col in num_cols_equity]
 )
+mask_a_neg_equity = np.logical_or.reduce(
+    [df_equity[col] < 0 for col in num_cols_equity]
+)
 
 # report equity data cleaning (sept. 2022 non-numeric free)
+# Note dismissed error handling: num_cols_equity astype "float64"
 list_msg_out.append("Equity_Analysis.xlsx")
 list_msg_out.append(
     f"RAKESH - PRESENCE of NON-NUMERICS in {mask_nan_in_equity.sum()} rows in equity data:"
 )
 list_msg_out.append(", ".join(df_equity.columns))
 for idx, a_row in df_equity[mask_nan_in_equity].iterrows():
+    list_msg_out.append(", ".join(a_row.values.astype(str)))
+
+list_msg_out.append(
+    f"RAKESH - PRESENCE of NEGATIVES in {(mask_a_neg_equity & ~mask_nan_in_equity).sum()} rows in equity data:"
+)
+for idx, a_row in df_equity[mask_a_neg_equity & ~mask_nan_in_equity].iterrows():
     list_msg_out.append(", ".join(a_row.values.astype(str)))
 
 list_msg_out.append(
@@ -821,26 +925,40 @@ for idx, a_row in df_equity[mask_a_null_equity & ~mask_nan_in_equity].iterrows()
 
 # equity kpis type and colour: report shown by Luigi (14/09/2022)
 # equity min-max colour: [#ff9437ff, #ae4131ff]
+equity_colours = [
+    "#3e7cabff",
+    "#64a0c9ff",
+    "#0c5e3eff",
+    "#348951ff",
+    "#58a360ff",
+    "#eb8d79ff",
+    "#b7809fff",
+    "#edc948ff",
+    "#f5715dff",
+    "#a8a8a8ff",
+    "#b5ede6ff",
+]
+
 equity_kpi_types = {
-    "Pregnancy": {
-        "kpis": [
-            "Any ANC",
-            "ANC4+",
-            "IFA for 100 days",
-            "Neonatal Tetanus Protection",
-        ],
-        "colour": "#3e7cabff",
-    },
-    "Birth": {
-        "kpis": ["Institutional delivery", "C-section delivery"],
-        "colour": "#64a0c9ff",
-    },
-    "Postnatal": {
-        "kpis": ["Breastfeeding 1 hour", "PNC mother 2 days", "PNC children 2 days"],
-        "colour": "#0c5e3eff",
-    },
-    "Infancy": {"kpis": ["DPT3", "Immunisation"], "colour": "#348951ff"},
-    "Childhood": {"kpis": ["Diarrhoea"], "colour": "#58a360ff"},
+    a_type: {
+        "kpis": {
+            f"{i}-{j}": a_name
+            for j, a_name in enumerate(
+                equity_org_df.query("Indicator_Type == @a_type").Indicator_name.values
+            )
+        },
+        "colour": equity_colours[i] if i < len(equity_colours) else equity_colours[-1],
+        "default": equity_org_df.query("Indicator_Type == @a_type")
+        .Default_display.map({"True": True, "False": False})
+        .values,
+    }
+    for i, a_type in enumerate(equity_org_df.Indicator_Type.dropna().unique())
+}
+# concat all "kpis" index into one dictionary
+equity_kpi_index = {
+    k: v
+    for a_type_dict in equity_kpi_types.values()
+    for k, v in a_type_dict["kpis"].items()
 }
 
 # join equity kpis type into data table
@@ -856,7 +974,7 @@ equity_kpi_type_df = pd.DataFrame(
         "Indicator": [
             a_kpi
             for a_type in equity_kpi_types
-            for a_kpi in equity_kpi_types[a_type]["kpis"]
+            for a_kpi in equity_kpi_types[a_type]["kpis"].values()
         ],
         "Type_colour": sum(
             [
