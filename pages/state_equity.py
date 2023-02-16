@@ -13,6 +13,7 @@ from . import (
     equity_kpi_types,
     label_no_fig,
     equity_kpi_index,
+    equity_dom_cat,
 )
 
 register_page(__name__, path="/state-equity", title="State Equity")
@@ -45,18 +46,11 @@ dd_states_equity = dbc.Select(
 
 # %%
 # dbc Select one disaggregation
-selected_disaggregation = [
-    "Wealth",
-    "Residence",
-    "Women's Education",
-    "Caste",
-    "Religion",
-    "Gender",
-]
+selected_disaggregation = list(equity_dom_cat.keys())
 dd_equity_disagg = dbc.Select(
     id="dd-equity-disagg",
     options=[{"label": l, "value": l} for l in selected_disaggregation],
-    value="Wealth",
+    value=selected_disaggregation[2],
     persistence=True,
     persistence_type="session",
 )
@@ -465,32 +459,15 @@ def update_equity_plot(state_value, round_value, disagg_value, selected_kpi):
     if not kpi_values:
         return {}, label_no_fig, {}
 
-    if disagg_value == "Residence":
-        col_map = ["Rural", "Urban"]
-        tip_val = ["Urban", "Rural"]
-    elif disagg_value == "Wealth":
-        col_map = ["Poorest", "Poor", "Middle", "Rich", "Richest"]
-        tip_val = ["Richest", "Poorest"]
-    elif disagg_value == "Women's Education":
-        col_map = [
-            "No education",
-            "Primary education",
-            "Secondary education",
-            "Higher education",
-        ]
-        tip_val = ["Higher education", "No education"]
-    elif disagg_value == "Caste":
-        col_map = ["SC", "ST", "OBC", "Others"]
-        tip_val = ["OBC", "SC"]
-    elif disagg_value == "Religion":
-        col_map = ["Hindu", "Muslim", "Other"]
-        tip_val = ["Hindu", "Muslim"]
-    elif disagg_value == "Gender":
-        col_map = ["Female", "Male"]
-        tip_val = ["Male", "Female"]
+    col_map = equity_dom_cat[disagg_value]["categories"]
+    tip_val = (
+        equity_dom_cat[disagg_value]["a_b_categories"]
+        if disagg_value != "Total"
+        else ["Total"]
+    )
 
     # bar colors
-    bar_colors = ["Total", *col_map]
+    bar_colors = ["Total", *col_map] if disagg_value != "Total" else col_map
     display_df = (
         df_equity.query(
             "State == @state_value & Year == @round_value & Indicator in @kpi_values"
@@ -564,7 +541,9 @@ def update_top_bottom(data_selected):
         return (
             data_selected["tip_val"][0],
             [{"label": l, "value": l} for l in data_selected["col_map"]],
-            data_selected["tip_val"][1],
+            data_selected["tip_val"][1]
+            if len(data_selected["tip_val"]) > 1
+            else data_selected["tip_val"][0],
             [{"label": l, "value": l} for l in data_selected["col_map"]],
             f"Select {data_selected['disagg']} Category 'A'",
             f"Select {data_selected['disagg']} Category 'B'",
