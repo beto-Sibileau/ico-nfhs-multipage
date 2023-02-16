@@ -2,11 +2,18 @@ import csv
 from dash import callback, dcc, html, Input, Output, State, register_page
 from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
+import dash_treeview_antd
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 import plotly.express as px
 
-from . import df_equity, equity_kpi_type_df, equity_kpi_types, label_no_fig
+from . import (
+    df_equity,
+    equity_kpi_type_df,
+    equity_kpi_types,
+    label_no_fig,
+    equity_kpi_index,
+)
 
 register_page(__name__, path="/state-equity", title="State Equity")
 
@@ -44,6 +51,7 @@ selected_disaggregation = [
     "Women's Education",
     "Caste",
     "Religion",
+    "Gender",
 ]
 dd_equity_disagg = dbc.Select(
     id="dd-equity-disagg",
@@ -98,9 +106,60 @@ dd_equity_bot = dbc.Select(
 )
 
 # %%
+# selection tree for equity kpis
+equity_kpi_tree = {
+    "title": "Select all",
+    "key": "0",
+    "children": [
+        {
+            "title": ind_type,
+            "key": "0-" + str(i),
+            "children": [
+                {"title": indicator_name, "key": "0-" + k}
+                for k, indicator_name in equity_kpi_index.items()
+                if k.split("-")[0] == str(i)
+            ],
+        }
+        for i, ind_type in enumerate(equity_kpi_types.keys())
+    ],
+}
+
+# dbc dd menu + dash tree (kpi selection by indicator type)
+dd_menu_equity_kpis = dbc.DropdownMenu(
+    label="Active Selection",
+    id="dd-select-equity-kpi",
+    size="md",
+    color="info",
+    align_end=True,
+    children=html.Div(
+        [
+            dash_treeview_antd.TreeView(
+                id="equity-kpis-selected",
+                multiple=True,
+                checkable=True,
+                checked=[
+                    f"0-{i}-{j}"
+                    for i, a_type in enumerate(equity_kpi_types)
+                    for j in range(len(equity_kpi_types[a_type]["kpis"]))
+                    if equity_kpi_types[a_type]["default"][j]
+                ],
+                expanded=[f"0-{i}" for i in range(len(equity_kpi_types))],
+                data=equity_kpi_tree,
+            ),
+        ],
+        style={
+            "maxHeight": "400px",
+            "overflowY": "scroll",
+        },
+    ),
+)
+
+# %%
 # dbc states data table (coloured-by-type bars + equity)
 layout = dbc.Container(
     [
+        # mantain data until browser/tab closes
+        dcc.Store(id="equity-session", storage_type="session"),
         dbc.Row(
             [
                 dbc.Col(
@@ -145,6 +204,25 @@ layout = dbc.Container(
                     html.Div(
                         [
                             html.P(
+                                "Select KPI/s",
+                                style={
+                                    "fontWeight": "bold",  # 'normal', #
+                                    "textAlign": "left",  # 'center', #
+                                    # 'paddingTop': '25px',
+                                    "color": "DeepSkyBlue",
+                                    "fontSize": "15px",
+                                    "marginBottom": "10px",
+                                },
+                            ),
+                            dd_menu_equity_kpis,
+                        ],
+                    ),
+                    width="auto",
+                ),
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.P(
                                 "Select Equity Disaggregation",
                                 style={
                                     "fontWeight": "bold",  # 'normal', #
@@ -159,11 +237,6 @@ layout = dbc.Container(
                         ]
                     ),
                     width="auto",
-                ),
-                dbc.Col(
-                    [bt_dwd_equity, dcc.Download(id="table-dwd-equity")],
-                    width="auto",
-                    style={"paddingTop": "20px"},
                 ),
             ],
             justify="evenly",
@@ -191,7 +264,7 @@ layout = dbc.Container(
                     html.Div(
                         [
                             html.P(
-                                "Select Top Category",
+                                id="title-cat-a",
                                 style={
                                     "fontWeight": "bold",  # 'normal', #
                                     "textAlign": "left",  # 'center', #
@@ -210,7 +283,7 @@ layout = dbc.Container(
                     html.Div(
                         [
                             html.P(
-                                "Select Bottom Category",
+                                id="title-cat-b",
                                 style={
                                     "fontWeight": "bold",  # 'normal', #
                                     "textAlign": "left",  # 'center', #
@@ -224,6 +297,11 @@ layout = dbc.Container(
                         ]
                     ),
                     width="auto",
+                ),
+                dbc.Col(
+                    [bt_dwd_equity, dcc.Download(id="table-dwd-equity")],
+                    width="auto",
+                    style={"paddingTop": "20px"},
                 ),
             ],
             justify="center",
@@ -293,6 +371,29 @@ def data_bars(column, row_id, bar_colour):
 
 
 # %%
+@callback(
+    Output("dd-select-equity-kpi", "label"),
+    Output("equity-session", "data"),
+    Input("equity-kpis-selected", "checked"),
+)
+# equity kpi dash tree
+def update_equity_selector(checked_kpis):
+
+    selected_kpis = [
+        equity_kpi_index[k.removeprefix("0-")]
+        for k in checked_kpis
+        if len(k.split("-")) == 3
+    ]
+
+    selected_kpis_label = f"Active Selection: {len(selected_kpis)} KPIs"
+
+    return (
+        selected_kpis_label,
+        dict(kpis=selected_kpis),
+    )
+
+
+# %%
 # customized bars for equity column (per-row based)
 def data_equity_bars(
     column,
@@ -335,7 +436,7 @@ def data_equity_bars(
 # %%
 # equity table column names
 col_total = "Total value"
-col_equity = "Top - Bottom"
+col_equity = "Equity (A-B)"
 # selection of datatable columns to download
 sel_col_dwd = [
     "Indicator Type",
@@ -355,8 +456,14 @@ sel_col_dwd = [
     Input("dd-states-equity", "value"),
     Input("dd-equity-round", "value"),
     Input("dd-equity-disagg", "value"),
+    Input("equity-session", "data"),
 )
-def update_equity_plot(state_value, round_value, disagg_value):
+def update_equity_plot(state_value, round_value, disagg_value, selected_kpi):
+
+    kpi_values = selected_kpi["kpis"]
+
+    if not kpi_values:
+        return {}, label_no_fig, {}
 
     if disagg_value == "Residence":
         col_map = ["Rural", "Urban"]
@@ -378,11 +485,16 @@ def update_equity_plot(state_value, round_value, disagg_value):
     elif disagg_value == "Religion":
         col_map = ["Hindu", "Muslim", "Other"]
         tip_val = ["Hindu", "Muslim"]
+    elif disagg_value == "Gender":
+        col_map = ["Female", "Male"]
+        tip_val = ["Male", "Female"]
 
     # bar colors
     bar_colors = ["Total", *col_map]
     display_df = (
-        df_equity.query("State == @state_value & Year == @round_value")
+        df_equity.query(
+            "State == @state_value & Year == @round_value & Indicator in @kpi_values"
+        )
         .melt(
             id_vars=["Indicator", "State", "Year"],
             value_vars=bar_colors,
@@ -398,6 +510,10 @@ def update_equity_plot(state_value, round_value, disagg_value):
         .round({"value": 2})
         .sort_values(by=["Indicator_Type", "Indicator"])
     )
+
+    # no data available for selections
+    if display_df.empty:
+        return {}, label_no_fig, {}
 
     # display_df in bars
     fig = (
@@ -426,7 +542,7 @@ def update_equity_plot(state_value, round_value, disagg_value):
             orient="split"
         ),
         fig,
-        {"tip_val": tip_val, "col_map": bar_colors},
+        {"tip_val": tip_val, "col_map": bar_colors, "disagg": disagg_value},
     )
 
 
@@ -437,17 +553,21 @@ def update_equity_plot(state_value, round_value, disagg_value):
     Output("dd-equity-top", "options"),
     Output("dd-equity-bot", "value"),
     Output("dd-equity-bot", "options"),
+    Output("title-cat-a", "children"),
+    Output("title-cat-b", "children"),
     Input("selections", "data"),
 )
 def update_top_bottom(data_selected):
     if not data_selected:
-        return "", [], "", []
+        return "", [], "", [], "No matching data", "No matching data"
     else:
         return (
             data_selected["tip_val"][0],
             [{"label": l, "value": l} for l in data_selected["col_map"]],
             data_selected["tip_val"][1],
             [{"label": l, "value": l} for l in data_selected["col_map"]],
+            f"Select {data_selected['disagg']} Category 'A'",
+            f"Select {data_selected['disagg']} Category 'B'",
         )
 
 
@@ -459,11 +579,11 @@ def update_top_bottom(data_selected):
     Input("dd-equity-top", "value"),
     Input("dd-equity-bot", "value"),
 )
-def update_equity_table(df_equity, top_value, bot_value):
-    if not df_equity:
+def update_equity_table(df_plotted, top_value, bot_value):
+    if not df_plotted:
         return None
     else:
-        df = pd.read_json(df_equity, orient="split").rename(
+        df = pd.read_json(df_plotted, orient="split").rename(
             columns={
                 "value": col_total,
                 "Indicator_Type": "Indicator Type",
