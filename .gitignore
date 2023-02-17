@@ -7,6 +7,9 @@ __pycache__/
 .devcontainer
 .vscode
 
+# for the moment do not perform codeql analysis
+codeql_analysis.yaml
+
 # C extensions
 *.so
 
