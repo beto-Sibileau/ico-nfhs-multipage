@@ -16,9 +16,3 @@ jobs:
         heroku_email: ${{ secrets.HEROKU_EMAIL }}
         heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
         heroku_app_name: ico-nfhs-multipage
-    - name: Deploy to Heroku
-      run: |
-        heroku login -i
-        heroku container:login
-        heroku container:push web -a ico-nfhs-multipage
-        heroku container:release web -a ico-nfhs-multipage
